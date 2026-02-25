@@ -1,0 +1,100 @@
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export function CameraScreen({ navigation }: any) {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+
+  if (!permission) {
+    return <View style={styles.container} />;
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.permissionCard}>
+          <Text style={styles.permissionTitle}>Permissão de Câmera</Text>
+          <Text style={styles.permissionText}>
+            O Passaporte da Ciclorota precisa de acesso à sua câmera para escanear os pontos da trilha.
+          </Text>
+          <TouchableOpacity style={styles.iosButton} onPress={requestPermission}>
+            <Text style={styles.iosButtonText}>Permitir Acesso</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iosButtonSecondary} onPress={() => navigation.goBack()}>
+            <Text style={styles.iosButtonSecondaryText}>Voltar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    setScanned(true);
+    
+    try {
+      const existingCheckins = await AsyncStorage.getItem('@ciclorota_checkins');
+      let checkinsArray = existingCheckins ? JSON.parse(existingCheckins) : [];
+
+      const newCheckin = {
+        checkpoint_id: data, 
+        scanned_at: new Date().toISOString(),
+      };
+      
+      checkinsArray.push(newCheckin);
+
+      await AsyncStorage.setItem('@ciclorota_checkins', JSON.stringify(checkinsArray));
+
+      Alert.alert(
+        'Ponto Registrado! 📍',
+        'Seu check-in foi salvo no passaporte. Ele será sincronizado quando houver internet.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível salvar o check-in.');
+      setScanned(false);
+    }
+  };
+
+  return (
+    <View style={styles.cameraContainer}>
+      <CameraView
+        style={StyleSheet.absoluteFillObject}
+        facing="back"
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+      />
+      
+      <View style={styles.overlay}>
+        <View style={styles.scanArea} />
+        <Text style={styles.scanText}>Aponte para o QR Code do Ponto</Text>
+      </View>
+
+      <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
+        <Text style={styles.cancelButtonText}>Cancelar</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', backgroundColor: '#F2F2F7', padding: 20 },
+  permissionCard: {
+    backgroundColor: '#FFFFFF', padding: 30, borderRadius: 14,
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, alignItems: 'center'
+  },
+  permissionTitle: { fontSize: 20, fontWeight: '600', color: '#000', marginBottom: 10 },
+  permissionText: { fontSize: 16, color: '#3C3C43', textAlign: 'center', marginBottom: 30, lineHeight: 22 },
+  iosButton: { backgroundColor: '#007AFF', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 12 },
+  iosButtonText: { color: '#FFF', fontSize: 17, fontWeight: '600' },
+  iosButtonSecondary: { backgroundColor: '#E5E5EA', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center' },
+  iosButtonSecondaryText: { color: '#007AFF', fontSize: 17, fontWeight: '600' },
+
+  cameraContainer: { flex: 1, backgroundColor: '#000' },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+  scanArea: { width: 250, height: 250, borderWidth: 2, borderColor: '#007AFF', borderRadius: 20, backgroundColor: 'transparent', marginBottom: 30 },
+  scanText: { color: '#FFF', fontSize: 17, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, overflow: 'hidden' },
+  cancelButton: { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: '#FFFFFF', paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30 },
+  cancelButtonText: { color: '#007AFF', fontSize: 17, fontWeight: '600' }
+});
