@@ -4,11 +4,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '../services/supabase';
+import { useTheme } from '../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export function HomeScreen({ session, navigation }: any) {
+const { colors, isDarkMode } = useTheme();
 const [profile, setProfile] = useState<any>(null);
 const [totalCheckpoints, setTotalCheckpoints] = useState(0); 
 const [loading, setLoading] = useState(true);
@@ -21,18 +24,18 @@ const progressStats = useMemo(() => {
   const porcentagem = totalCheckpoints > 0 ? Math.round((visitados / totalCheckpoints) * 100) : 0;
   
   let mensagem = "Continue pedalando! 🚴‍♂️";
-  let statusColor = "#007AFF"; 
+  let statusColor = colors.primary; 
 
   if (porcentagem >= 100 && totalCheckpoints > 0) {
     mensagem = "Parabéns, você completou! 🎉";
-    statusColor = "#34C759"; 
+    statusColor = colors.success; 
   } else if (porcentagem >= 80) {
     mensagem = "Quase lá! Falta pouco. 🔥";
-    statusColor = "#FF9500"; 
+    statusColor = colors.warning; 
   }
 
   return { visitados, porcentagem, mensagem, statusColor };
-}, [profile, totalCheckpoints]);
+}, [profile, totalCheckpoints, colors]);
 
 const loadDataAndSync = async () => {
   const userId = session?.user?.id;
@@ -121,17 +124,19 @@ const handleIssueCertificate = async () => {
 
 useFocusEffect(useCallback(() => { loadDataAndSync(); }, [session]));
 
+const styles = getStyles(colors, isDarkMode);
+
 if (loading) {
   return (
     <View style={styles.centerContainer}>
-      <ActivityIndicator size="large" color="#007AFF" />
+      <ActivityIndicator size="large" color={colors.primary} />
     </View>
   );
 }
 
 return (
   <SafeAreaView style={styles.safeArea}>
-    <StatusBar barStyle="dark-content" />
+    <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
     <ScrollView 
     contentContainerStyle={styles.scrollContainer} 
       showsVerticalScrollIndicator={false}
@@ -139,24 +144,34 @@ return (
       
       <View style={styles.header}>
         <Text style={styles.greeting}>Olá, {profile?.full_name?.split(' ')[0] || 'Ciclista'}</Text>
-        <Text style={styles.largeTitle}>Passaporte</Text>
+        <Text style={styles.largeTitle}>Seu Passaporte</Text>
       </View>
 
       <View style={styles.progressCard}>
-        <View style={[styles.progressRing, { borderColor: '#E5E5EA' }]}>
-            
-          <View style={[
-              styles.progressFill, 
-              { 
-                borderTopColor: progressStats.porcentagem > 0 ? progressStats.statusColor : 'transparent',
-                borderRightColor: progressStats.porcentagem > 25 ? progressStats.statusColor : 'transparent',
-                borderBottomColor: progressStats.porcentagem > 50 ? progressStats.statusColor : 'transparent',
-                borderLeftColor: progressStats.porcentagem > 75 ? progressStats.statusColor : 'transparent',
-              }
-            ]} 
-          />
-          
-          <View style={styles.innerCircle}>
+        <View style={styles.progressRingContainer}>
+          <Svg width="80" height="80" viewBox="0 0 80 80">
+            <Circle
+              cx="40"
+              cy="40"
+              r="34"
+              stroke={colors.borderLight}
+              strokeWidth="8"
+              fill="transparent"
+            />
+            <Circle
+              cx="40"
+              cy="40"
+              r="34"
+              stroke={progressStats.porcentagem > 0 ? progressStats.statusColor : 'transparent'}
+              strokeWidth="8"
+              fill="transparent"
+              strokeDasharray={`${2 * Math.PI * 34}`}
+              strokeDashoffset={2 * Math.PI * 34 - (2 * Math.PI * 34 * progressStats.porcentagem) / 100}
+              strokeLinecap="round"
+              transform="rotate(-90 40 40)"
+            />
+          </Svg>
+          <View style={styles.innerCircleAbsolute}>
             <Text style={[styles.percentageText, { color: progressStats.statusColor }]}>
               {progressStats.porcentagem}%
             </Text>
@@ -179,8 +194,8 @@ return (
         onPress={() => navigation.navigate('Camera')}
         activeOpacity={0.8}
         >
-        <Ionicons name="qr-code-outline" size={26} color="white" />
-        <Text style={styles.primaryButtonText}>Ler QR Code do Ponto</Text>
+        <Ionicons name="qr-code-outline" size={26} color={colors.white} />
+        <Text style={styles.primaryButtonText}>Escanear Checkpoint</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Recompensas</Text>
@@ -190,7 +205,7 @@ return (
             <Ionicons 
               name={profile?.estatisticas?.possui_certificado ? "ribbon" : "lock-closed"} 
               size={24} 
-              color={profile?.estatisticas?.possui_certificado ? "#FF9500" : "#8E8E93"} 
+              color={profile?.estatisticas?.possui_certificado ? colors.warning : colors.textSecondary} 
             />
           </View>
           <View style={styles.rewardTextContent}>
@@ -214,7 +229,7 @@ return (
           disabled={progressStats.porcentagem < 100 || profile?.estatisticas?.possui_certificado || issuing}
           onPress={handleIssueCertificate}
         >
-          <Text style={[styles.actionButtonText, profile?.estatisticas?.possui_certificado && { color: '#248A3D' }]}>
+          <Text style={[styles.actionButtonText, profile?.estatisticas?.possui_certificado && { color: colors.success }]}>
             {issuing ? 'Processando...' : (profile?.estatisticas?.possui_certificado ? "✓ Resgatado" : "Resgatar Certificado")}
           </Text>
         </TouchableOpacity>
@@ -231,24 +246,23 @@ return (
 );
 }
 
-const styles = StyleSheet.create({
-safeArea: { flex: 1, backgroundColor: '#F2F2F7', paddingTop: Platform.OS === 'android' ? 45 : 0 },
+const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
+safeArea: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 45 : 0 },
 scrollContainer: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
-centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F2F7' },
+centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
 header: { marginBottom: 30, marginTop: 10 },
-greeting: { fontSize: 14, color: '#8E8E93', textTransform: 'uppercase', fontWeight: '700', letterSpacing: 1 },
-largeTitle: { fontSize: 36, fontWeight: '800', color: '#000', marginTop: 4 },
-progressCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', marginBottom: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
-progressRing: { width: 80, height: 80, borderRadius: 40, borderWidth: 8, justifyContent: 'center', alignItems: 'center', position: 'relative', transform: [{ rotate: '45deg' }] },
-progressFill: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 8, borderTopColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' },
-innerCircle: { transform: [{ rotate: '-45deg' }], justifyContent: 'center', alignItems: 'center' },
+greeting: { fontSize: 14, color: colors.textSecondary, textTransform: 'uppercase', fontWeight: '700', letterSpacing: 1 },
+largeTitle: { fontSize: 36, fontWeight: '800', color: colors.text, marginTop: 4 },
+progressCard: { backgroundColor: colors.card, borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', marginBottom: 25, shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
+progressRingContainer: { width: 80, height: 80, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+innerCircleAbsolute: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
 percentageText: { fontSize: 18, fontWeight: '800' },
 progressInfo: { flex: 1, marginLeft: 20 },
-progressTitle: { fontSize: 13, color: '#8E8E93', fontWeight: '600', textTransform: 'uppercase' },
-progressSub: { fontSize: 20, fontWeight: '700', color: '#000', marginVertical: 2 },
+progressTitle: { fontSize: 13, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' },
+progressSub: { fontSize: 20, fontWeight: '700', color: colors.text, marginVertical: 2 },
 motivationText: { fontSize: 13, fontWeight: '600', marginTop: 4 },
 primaryButton: { 
-  backgroundColor: '#007AFF', 
+  backgroundColor: colors.primary, 
   height: 65, 
   borderRadius: 20, 
   flexDirection: 'row', 
@@ -256,27 +270,27 @@ primaryButton: {
   alignItems: 'center', 
   gap: 10, 
   marginBottom: 35, 
-  shadowColor: '#007AFF', 
+  shadowColor: colors.primary, 
   shadowOffset: { width: 0, height: 6 }, 
   shadowOpacity: 0.3, 
   shadowRadius: 10, 
   elevation: 6 
 },
-primaryButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000', marginBottom: 15, marginLeft: 5 },
-rewardCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
+primaryButtonText: { color: colors.white, fontSize: 18, fontWeight: '700' },
+sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 15, marginLeft: 5 },
+rewardCard: { backgroundColor: colors.card, borderRadius: 24, padding: 20, shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
 rewardRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
 rewardIconContainer: { width: 50, height: 50, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-iconActive: { backgroundColor: '#FFF9E5' },
-iconLocked: { backgroundColor: '#F2F2F7' },
+iconActive: { backgroundColor: isDarkMode ? '#332A00' : '#FFF9E5' },
+iconLocked: { backgroundColor: colors.secondaryBg },
 rewardTextContent: { flex: 1, marginLeft: 15 },
-rewardName: { fontSize: 17, fontWeight: '700', color: '#000' },
-rewardStatus: { fontSize: 14, color: '#8E8E93', marginTop: 2 },
+rewardName: { fontSize: 17, fontWeight: '700', color: colors.text },
+rewardStatus: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
 actionButton: { height: 50, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-btnActive: { backgroundColor: '#34C759' },
-btnDisabled: { backgroundColor: '#E5E5EA' },
-btnClaimed: { backgroundColor: '#E5FEE9', borderWidth: 1, borderColor: '#34C759' },
-actionButtonText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
-offlineWarning: { backgroundColor: '#FFF3CD', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FFEEBA', marginTop: 20 },
-offlineText: { color: '#856404', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+btnActive: { backgroundColor: colors.success },
+btnDisabled: { backgroundColor: colors.borderLight },
+btnClaimed: { backgroundColor: colors.successBg, borderWidth: 1, borderColor: colors.success },
+actionButtonText: { color: colors.white, fontWeight: '700', fontSize: 16 },
+offlineWarning: { backgroundColor: isDarkMode ? '#4D3800' : '#FFF3CD', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: isDarkMode ? '#664D00' : '#FFEEBA', marginTop: 20 },
+offlineText: { color: isDarkMode ? '#FFD633' : '#856404', fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });

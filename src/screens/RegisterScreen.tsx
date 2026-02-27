@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Alert, StyleSheet, View, TextInput, Button, Text, TouchableOpacity } from 'react-native';
 import { supabase } from '../services/supabase';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function RegisterScreen({ navigation }: any) {
+  const { colors, isDarkMode } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +22,8 @@ export function RegisterScreen({ navigation }: any) {
     setLoading(false);
   }
 
+  const styles = getStyles(colors, isDarkMode);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Nova Conta 🚵‍♀️</Text>
@@ -30,6 +34,7 @@ export function RegisterScreen({ navigation }: any) {
           onChangeText={setEmail}
           value={email}
           placeholder="E-mail"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           keyboardType="email-address"
         />
@@ -39,11 +44,12 @@ export function RegisterScreen({ navigation }: any) {
           value={password}
           secureTextEntry={true}
           placeholder="Senha"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
         />
       </View>
 
-      <Button title="Criar Conta" disabled={loading} onPress={signUpWithEmail} color="#28a745" />
+      <Button title="Criar Conta" disabled={loading} onPress={signUpWithEmail} color={colors.success} />
 
       <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.linkButton}>
         <Text style={styles.linkText}>Já tem uma conta? Entre aqui.</Text>
@@ -52,11 +58,11 @@ export function RegisterScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: '#e8f5e9' }, 
-  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 40, color: '#333' },
+const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
+  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: isDarkMode ? colors.background : '#e8f5e9' }, 
+  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 40, color: colors.text },
   inputContainer: { marginBottom: 20 },
-  input: { backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 15, borderWidth: 1, borderColor: '#ddd' },
+  input: { backgroundColor: colors.card, padding: 15, borderRadius: 8, marginBottom: 15, borderWidth: 1, borderColor: colors.border, color: colors.text },
   linkButton: { marginTop: 20, alignItems: 'center' },
-  linkText: { color: '#28a745', fontWeight: 'bold' } 
+  linkText: { color: colors.success, fontWeight: 'bold' } 
 });

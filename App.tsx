@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // @ts-ignore
@@ -14,21 +14,25 @@ import { CameraScreen } from './src/screens/CameraScreen';
 import { RouteScreen } from './src/screens/RouteScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { EditProfileScreen } from './src/screens/EditProfileScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs({ session }: any) {
+  const { colors } = useTheme();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false, 
-        tabBarActiveTintColor: '#007AFF', 
-        tabBarInactiveTintColor: '#8E8E93', 
+        tabBarActiveTintColor: colors.primary, 
+        tabBarInactiveTintColor: colors.tabBarInactive, 
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.tabBar,
           borderTopWidth: 1,
-          borderTopColor: '#E5E5EA',
+          borderTopColor: colors.borderLight,
           paddingBottom: 20,
           paddingTop: 5,
           height: 70,
@@ -57,7 +61,8 @@ function MainTabs({ session }: any) {
   );
 }
 
-export default function App() {
+function RootNavigator() {
+  const { colors, isDarkMode } = useTheme();
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
@@ -81,8 +86,23 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer theme={{
+      ...DefaultTheme,
+      dark: isDarkMode,
+      colors: {
+        ...DefaultTheme.colors,
+        primary: colors.primary,
+        background: colors.background,
+        card: colors.card,
+        text: colors.text,
+        border: colors.borderLight,
+        notification: colors.primary,
+      },
+    }}>
+      <Stack.Navigator screenOptions={{ 
+        headerShown: false, 
+        contentStyle: { backgroundColor: colors.background },
+      }}>
         <Stack.Screen name="MainTabs">
           {(props) => <MainTabs {...props} session={session} />}
         </Stack.Screen>
@@ -90,17 +110,29 @@ export default function App() {
         <Stack.Screen 
           name="Camera" 
           component={CameraScreen} 
-          options={{ presentation: 'modal' }} 
+          options={{ presentation: 'transparentModal' }} 
         />
 
         <Stack.Screen 
           name="EditProfile" 
           component={EditProfileScreen} 
-          // Opcional: presentation: 'modal' faz com que a tela suba de baixo para cima no iOS, 
-          // dando um efeito bem premium. Se preferir a navegação normal (lado a lado), pode remover a linha abaixo.
-          options={{ presentation: 'modal' }} 
+          options={{ presentation: 'transparentModal', animation: 'slide_from_right' }} 
+        />
+
+        <Stack.Screen 
+          name="Settings" 
+          component={SettingsScreen} 
+          options={{ presentation: 'transparentModal', animation: 'slide_from_right' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <RootNavigator />
+    </ThemeProvider>
   );
 }

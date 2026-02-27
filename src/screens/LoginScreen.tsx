@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Alert, StyleSheet, View, TextInput, Button, Text, TouchableOpacity } from 'react-native';
 import { supabase } from '../services/supabase';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function LoginScreen({ navigation }: any) {
+  const { colors, isDarkMode } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,6 +16,8 @@ export function LoginScreen({ navigation }: any) {
     setLoading(false);
   }
 
+  const styles = getStyles(colors, isDarkMode);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Passaporte da Ciclorota 🚴‍♂️</Text>
@@ -24,6 +28,7 @@ export function LoginScreen({ navigation }: any) {
           onChangeText={setEmail}
           value={email}
           placeholder="E-mail"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           keyboardType="email-address"
         />
@@ -33,6 +38,7 @@ export function LoginScreen({ navigation }: any) {
           value={password}
           secureTextEntry={true}
           placeholder="Senha"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
         />
       </View>
@@ -46,11 +52,11 @@ export function LoginScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: '#f5f5f5' },
-  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 40, color: '#333' },
+const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
+  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: colors.background },
+  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 40, color: colors.text },
   inputContainer: { marginBottom: 20 },
-  input: { backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 15, borderWidth: 1, borderColor: '#ddd' },
+  input: { backgroundColor: colors.card, padding: 15, borderRadius: 8, marginBottom: 15, borderWidth: 1, borderColor: colors.border, color: colors.text },
   linkButton: { marginTop: 20, alignItems: 'center' },
-  linkText: { color: '#0066cc', fontWeight: 'bold' }
+  linkText: { color: colors.primary, fontWeight: 'bold' }
 });

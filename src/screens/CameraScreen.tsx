@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function CameraScreen({ navigation }: any) {
+  const { colors, isDarkMode } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+
+  const styles = getStyles(colors, isDarkMode);
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -78,23 +82,23 @@ export function CameraScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', backgroundColor: '#F2F2F7', padding: 20 },
+const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', backgroundColor: colors.background, padding: 20 },
   permissionCard: {
-    backgroundColor: '#FFFFFF', padding: 30, borderRadius: 14,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, alignItems: 'center'
+    backgroundColor: colors.card, padding: 30, borderRadius: 14,
+    shadowColor: colors.text, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, alignItems: 'center'
   },
-  permissionTitle: { fontSize: 20, fontWeight: '600', color: '#000', marginBottom: 10 },
-  permissionText: { fontSize: 16, color: '#3C3C43', textAlign: 'center', marginBottom: 30, lineHeight: 22 },
-  iosButton: { backgroundColor: '#007AFF', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 12 },
-  iosButtonText: { color: '#FFF', fontSize: 17, fontWeight: '600' },
-  iosButtonSecondary: { backgroundColor: '#E5E5EA', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center' },
-  iosButtonSecondaryText: { color: '#007AFF', fontSize: 17, fontWeight: '600' },
+  permissionTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 10 },
+  permissionText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginBottom: 30, lineHeight: 22 },
+  iosButton: { backgroundColor: colors.primary, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 12 },
+  iosButtonText: { color: colors.white, fontSize: 17, fontWeight: '600' },
+  iosButtonSecondary: { backgroundColor: colors.borderLight, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center' },
+  iosButtonSecondaryText: { color: colors.primary, fontSize: 17, fontWeight: '600' },
 
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
-  scanArea: { width: 250, height: 250, borderWidth: 2, borderColor: '#007AFF', borderRadius: 20, backgroundColor: 'transparent', marginBottom: 30 },
+  scanArea: { width: 250, height: 250, borderWidth: 2, borderColor: colors.primary, borderRadius: 20, backgroundColor: 'transparent', marginBottom: 30 },
   scanText: { color: '#FFF', fontSize: 17, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, overflow: 'hidden' },
-  cancelButton: { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: '#FFFFFF', paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30 },
-  cancelButtonText: { color: '#007AFF', fontSize: 17, fontWeight: '600' }
+  cancelButton: { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: colors.card, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30 },
+  cancelButtonText: { color: colors.primary, fontSize: 17, fontWeight: '600' }
 });
