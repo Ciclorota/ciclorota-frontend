@@ -13,6 +13,7 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { CameraScreen } from './src/screens/CameraScreen';
 import { RouteScreen } from './src/screens/RouteScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { EditProfileScreen } from './src/screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -89,6 +90,14 @@ export default function App() {
         <Stack.Screen 
           name="Camera" 
           component={CameraScreen} 
+          options={{ presentation: 'modal' }} 
+        />
+
+        <Stack.Screen 
+          name="EditProfile" 
+          component={EditProfileScreen} 
+          // Opcional: presentation: 'modal' faz com que a tela suba de baixo para cima no iOS, 
+          // dando um efeito bem premium. Se preferir a navegação normal (lado a lado), pode remover a linha abaixo.
           options={{ presentation: 'modal' }} 
         />
       </Stack.Navigator>
