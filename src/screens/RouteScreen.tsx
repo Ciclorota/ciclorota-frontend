@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
@@ -98,7 +98,26 @@ export function RouteScreen() {
 
   const styles = getStyles(colors, isDarkMode);
 
-  if (loading) {
+  const openDirections = (latitude: string | number, longitude: string | number) => {
+    if (!latitude || !longitude) return;
+    
+    const url = Platform.select({
+      ios: `maps://app?daddr=${latitude},${longitude}&dirflg=d`,
+      android: `google.navigation:q=${latitude},${longitude}`
+    });
+
+    if (url) {
+      Linking.canOpenURL(url).then(supported => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+        }
+      }).catch(err => console.error('Erro ao abrir mapas:', err));
+    }
+  };
+
+  if (loading && routeData.length === 0) {
     return (
       <View style={[styles.safeArea, styles.centerContainer]}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -115,7 +134,7 @@ export function RouteScreen() {
         <View style={styles.headerContainer}>
           <Text style={styles.largeTitle}>A Rota</Text>
           
-          <Text style={[styles.subtitle, isRouteCompleted && {   }]}>
+          <Text style={[styles.subtitle, isRouteCompleted && { color: colors.success, fontWeight: '500' }]}>
             {isRouteCompleted 
               ? "Parabéns! Você completou toda a rota da Mata Atlântica. O seu certificado já está disponível!" 
               : "Explore os pontos da Mata Atlântica. Visite todos para desbloquear o seu certificado!"}
@@ -175,7 +194,12 @@ export function RouteScreen() {
               const isLast = index === routeData.length - 1;
 
               return (
-                <View key={item.id} style={styles.listItem}>
+                <TouchableOpacity 
+                  key={item.id} 
+                  style={styles.listItem}
+                  activeOpacity={0.7}
+                  onPress={() => openDirections(item.latitude, item.longitude)}
+                >
                   <View style={[styles.sequenceContainer, item.isVisited ? styles.sequenceVisited : styles.sequencePending]}>
                     <Text style={[styles.sequenceText, item.isVisited ? styles.sequenceVisitedText : styles.sequencePendingText]}>
                       {index + 1}
@@ -193,12 +217,12 @@ export function RouteScreen() {
                     {item.isVisited ? (
                       <Ionicons name="checkmark-circle" size={28} color={colors.success} /> 
                     ) : (
-                      <Ionicons name="lock-closed" size={24} color={colors.border} /> 
+                      <Ionicons name="navigate-circle-outline" size={28} color={colors.primary} /> 
                     )}
                   </View>
 
                   {!isLast && <View style={styles.divider} />}
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
