@@ -7,8 +7,10 @@ import { supabase } from '../services/supabase';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps'; 
 import { useTheme } from '../contexts/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const ROUTE_CACHE_KEY = '@ciclorota_route_cache';
 
 export function RouteScreen() {
   const { colors, isDarkMode } = useTheme();
@@ -18,10 +20,38 @@ export function RouteScreen() {
   useFocusEffect(
     useCallback(() => {
       async function fetchRouteProgress() {
+        setLoading(true);
         try {
           const { data: { session } } = await supabase.auth.getSession();
           const userId = session?.user?.id;
-          if (!userId) return;
+          if (!userId) {
+            setLoading(false);
+            return;
+          }
+
+          const cachedSnapshot = await getUserOfflineSnapshot(userId);
+          if (cachedSnapshot?.checkpoints && cachedSnapshot?.progressHistory) {
+            const visitedFromSnapshot = (cachedSnapshot.progressHistory || [])
+              .map((checkin: any) => checkin?.checkpoints?.id)
+              .filter(Boolean);
+
+            const mergedFromSnapshot = (cachedSnapshot.checkpoints || []).map((cp: any) => ({
+              ...cp,
+              isVisited: visitedFromSnapshot.includes(cp.id),
+            }));
+
+            setRouteData(mergedFromSnapshot);
+            setLoading(false);
+          }
+
+          const cachedRoute = await AsyncStorage.getItem(ROUTE_CACHE_KEY);
+          if (cachedRoute) {
+            const parsedCache = JSON.parse(cachedRoute);
+            if (Array.isArray(parsedCache)) {
+              setRouteData(parsedCache);
+              setLoading(false);
+            }
+          }
 
           const checkpointsRes = await fetch(`${API_URL}/checkpoints`, {
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
@@ -32,7 +62,8 @@ export function RouteScreen() {
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
           });
           const progressData = await progressRes.json();
-          const visitedIdsBackend = progressData.historico?.map((checkin: any) => checkin.checkpoints.id) || [];
+          const latestProgressHistory = progressData.historico || [];
+          const visitedIdsBackend = latestProgressHistory.map((checkin: any) => checkin.checkpoints.id) || [];
 
           const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
           let visitedIdsLocal: string[] = [];
@@ -49,6 +80,11 @@ export function RouteScreen() {
           }));
 
           setRouteData(mergedData);
+          await AsyncStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(mergedData));
+          await updateUserOfflineSnapshot(userId, {
+            checkpoints: allCheckpoints,
+            progressHistory: latestProgressHistory,
+          });
         } catch (error) {
           console.error('Erro ao carregar rota:', error);
         } finally {

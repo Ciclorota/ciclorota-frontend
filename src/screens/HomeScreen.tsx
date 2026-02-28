@@ -8,6 +8,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
+import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -19,14 +20,13 @@ export function HomeScreen({ session, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false); 
   const [issuing, setIssuing] = useState(false); 
+  const [serverVisitedCount, setServerVisitedCount] = useState(0);
   
   const [offlineCount, setOfflineCount] = useState(0); 
-  // NOVO: Estado para contar APENAS os pontos offline que são verdadeiros e inéditos
   const [validOfflineCount, setValidOfflineCount] = useState(0); 
 
   const progressStats = useMemo(() => {
-    const visitadosServidor = profile?.estatisticas?.total_pontos_visitados || 0;
-    // CÁLCULO BLINDADO: Soma apenas os pontos válidos e inéditos da fila offline
+    const visitadosServidor = serverVisitedCount;
     const visitados = visitadosServidor + validOfflineCount; 
     const porcentagem = totalCheckpoints > 0 ? Math.round((visitados / totalCheckpoints) * 100) : 0;
     
@@ -42,29 +42,49 @@ export function HomeScreen({ session, navigation }: any) {
     }
 
     return { visitados, porcentagem, mensagem, statusColor };
-  }, [profile, totalCheckpoints, validOfflineCount, colors]);
+  }, [serverVisitedCount, totalCheckpoints, validOfflineCount, colors]);
 
   const loadDataAndSync = async () => {
     const userId = session?.user?.id;
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     
     try {
       setSyncing(true);
+      let latestTotalCheckpoints = 0;
+      let latestProfileData: any = null;
+      let latestCheckpoints: any[] | null = null;
+      let latestProgressHistory: any[] | null = null;
 
-      // 1. LÊ AS LISTAS SECRETAS (CACHE LOCAL) ANTES DE TUDO
+      const cachedSnapshot = await getUserOfflineSnapshot(userId);
+      if (cachedSnapshot) {
+        if (cachedSnapshot.profile) {
+          setProfile(cachedSnapshot.profile);
+        }
+        if (Array.isArray(cachedSnapshot.checkpoints)) {
+          latestTotalCheckpoints = cachedSnapshot.checkpoints.length;
+          setTotalCheckpoints(latestTotalCheckpoints);
+        }
+        if (Array.isArray(cachedSnapshot.progressHistory)) {
+          setServerVisitedCount(cachedSnapshot.progressHistory.length);
+        }
+      }
+
       const validIdsStr = await AsyncStorage.getItem('@ciclorota_valid_ids');
       const visitedIdsStr = await AsyncStorage.getItem('@ciclorota_visited_ids');
       const validIds = validIdsStr ? JSON.parse(validIdsStr) : [];
-      const visitedIds = visitedIdsStr ? JSON.parse(visitedIdsStr) : [];
+      const visitedIds = visitedIdsStr
+        ? JSON.parse(visitedIdsStr)
+        : (cachedSnapshot?.progressHistory || []).map((checkin: any) => checkin?.checkpoints?.id).filter(Boolean);
 
-      // 2. LÊ A FILA OFFLINE
       const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
       let checkinsArray = [];
       if (offlineData) {
         checkinsArray = JSON.parse(offlineData);
-        setOfflineCount(checkinsArray.length); // Mostra o aviso amarelo na tela (mesmo sendo código lixo)
+        setOfflineCount(checkinsArray.length); 
 
-        // O FILTRO DETETIVE: Só soma na barra de progresso se o ID existir na trilha e ainda não tiver sido visitado!
         if (validIds.length > 0) {
           const uniqueValidOffline = [...new Set(checkinsArray.map((c: any) => c.checkpoint_id))]
             .filter((id: any) => validIds.includes(id) && !visitedIds.includes(id));
@@ -77,7 +97,6 @@ export function HomeScreen({ session, navigation }: any) {
         setValidOfflineCount(0);
       }
 
-      // 3. TENTA SINCRONIZAR COM O SERVIDOR
       if (checkinsArray.length > 0) {
         const syncResponse = await fetch(`${API_URL}/checkins`, {
           method: 'POST',
@@ -112,26 +131,37 @@ export function HomeScreen({ session, navigation }: any) {
         }
       }
 
-      // 4. RENOVA OS DADOS DO SERVIDOR E GUARDA AS LISTAS SECRETAS PARA A PRÓXIMA VEZ OFFLINE
       const cpResponse = await fetch(`${API_URL}/checkpoints`);
       if (cpResponse.ok) {
         const cpData = await cpResponse.json();
-        setTotalCheckpoints(cpData.length || 0);
-        // Guarda todos os IDs de checkpoints válidos no aparelho
+        latestCheckpoints = cpData;
+        latestTotalCheckpoints = cpData.length || 0;
+        setTotalCheckpoints(latestTotalCheckpoints);
         await AsyncStorage.setItem('@ciclorota_valid_ids', JSON.stringify(cpData.map((c: any) => c.id)));
       }
 
       const response = await fetch(`${API_URL}/profiles/${userId}`);
       if (response.ok) {
-        setProfile(await response.json());
+        latestProfileData = await response.json();
+        setProfile(latestProfileData);
       }
 
       const progressRes = await fetch(`${API_URL}/progress/${userId}`);
       if (progressRes.ok) {
         const progressData = await progressRes.json();
+        const progressHistory = progressData.historico || [];
+        latestProgressHistory = progressHistory;
+        setServerVisitedCount(progressHistory.length);
         const visitedIdsBackend = progressData.historico?.map((checkin: any) => checkin.checkpoints.id) || [];
-        // Guarda todos os IDs que o utilizador já visitou no aparelho
         await AsyncStorage.setItem('@ciclorota_visited_ids', JSON.stringify(visitedIdsBackend));
+      }
+
+      if (latestProfileData || latestCheckpoints || latestProgressHistory) {
+        await updateUserOfflineSnapshot(userId, {
+          ...(latestProfileData ? { profile: latestProfileData } : {}),
+          ...(latestCheckpoints ? { checkpoints: latestCheckpoints } : {}),
+          ...(latestProgressHistory ? { progressHistory: latestProgressHistory } : {}),
+        });
       }
 
     } catch (error) {
@@ -162,10 +192,14 @@ export function HomeScreen({ session, navigation }: any) {
           message: data.mensagem,
           variant: 'success',
         });
-        setProfile((prev: any) => ({
-          ...prev,
-          estatisticas: { ...prev.estatisticas, possui_certificado: true }
-        }));
+        const updatedProfile = {
+          ...profile,
+          estatisticas: { ...profile?.estatisticas, possui_certificado: true }
+        };
+        setProfile(updatedProfile);
+        await updateUserOfflineSnapshot(userId, {
+          profile: updatedProfile,
+        });
       } else {
         showAlert({
           title: 'Aviso',

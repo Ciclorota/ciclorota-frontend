@@ -1,13 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
+import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const PROFILE_CACHE_KEY = '@ciclorota_profile_cache';
 
 export function ProfileScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
@@ -18,19 +21,56 @@ export function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfileAndHistory = async () => {
+    setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
-      
+
       if (session?.user?.created_at) {
         setUserCreatedAt(session.user.created_at);
       }
 
-      if (!userId) return;
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
+      const cachedSnapshot = await getUserOfflineSnapshot(userId);
+      if (cachedSnapshot?.profile) {
+        setProfile(cachedSnapshot.profile);
+      }
+      if (Array.isArray(cachedSnapshot?.progressHistory)) {
+        const sortedFromSnapshot = [...cachedSnapshot.progressHistory].sort((a: any, b: any) => {
+          return new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime();
+        });
+        setHistory(sortedFromSnapshot);
+      }
+      if (cachedSnapshot?.profile || cachedSnapshot?.progressHistory) {
+        setLoading(false);
+      }
+
+      const cachedProfileData = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+      if (cachedProfileData) {
+        const parsedCache = JSON.parse(cachedProfileData);
+        if (parsedCache?.profile) {
+          setProfile(parsedCache.profile);
+        }
+        if (Array.isArray(parsedCache?.history)) {
+          setHistory(parsedCache.history);
+        }
+        if (parsedCache?.userCreatedAt) {
+          setUserCreatedAt(parsedCache.userCreatedAt);
+        }
+        setLoading(false);
+      }
+
+      let latestProfile: any = null;
+      let latestHistory: any[] = [];
 
       const profileRes = await fetch(`${API_URL}/profiles/${userId}`);
       if (profileRes.ok) {
-        setProfile(await profileRes.json());
+        latestProfile = await profileRes.json();
+        setProfile(latestProfile);
       }
 
       const progressRes = await fetch(`${API_URL}/progress/${userId}`);
@@ -39,7 +79,27 @@ export function ProfileScreen({ navigation }: any) {
         const sortedHistory = (progressData.historico || []).sort((a: any, b: any) => {
           return new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime();
         });
-        setHistory(sortedHistory);
+        latestHistory = sortedHistory;
+        setHistory(latestHistory);
+      }
+
+      if (latestProfile) {
+        await AsyncStorage.setItem(
+          PROFILE_CACHE_KEY,
+          JSON.stringify({
+            profile: latestProfile,
+            history: latestHistory,
+            userCreatedAt: session?.user?.created_at || userCreatedAt,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      }
+
+      if (latestProfile || latestHistory.length > 0) {
+        await updateUserOfflineSnapshot(userId, {
+          ...(latestProfile ? { profile: latestProfile } : {}),
+          ...(latestHistory.length > 0 ? { progressHistory: latestHistory } : {}),
+        });
       }
     } catch (error) {
       console.error('Erro ao carregar perfil:', error);
