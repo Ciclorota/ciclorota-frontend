@@ -120,22 +120,28 @@ export function ProfileScreen({ navigation }: any) {
             <Text style={styles.emptyStateSub}>Vá até à aba Início e leia o seu primeiro QR Code!</Text>
           </View>
         ) : (
-          <View style={styles.listContainer}>
-            {history.map((item, index) => {
-              const isLast = index === history.length - 1;
-              return (
-                <View key={item.id} style={styles.listItemHistory}>
-                  {!isLast && <View style={styles.timelineLine} />}
-                  <View style={styles.iconContainerGreen}>
-                    <Ionicons name="location" size={20} color={colors.success} />
+          <View style={[styles.listContainer, styles.historyContainerLimit]}>
+            <ScrollView 
+              nestedScrollEnabled={true} 
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={{ paddingBottom: 5 }}
+            >
+              {history.map((item, index) => {
+                const isLast = index === history.length - 1;
+                return (
+                  <View key={item.id} style={styles.listItemHistory}>
+                    {!isLast && <View style={styles.timelineLine} />}
+                    <View style={styles.iconContainerGreen}>
+                      <Ionicons name="location" size={20} color={colors.success} />
+                    </View>
+                    <View style={styles.itemTextContainer}>
+                      <Text style={styles.itemName}>{item.checkpoints?.name}</Text>
+                      <Text style={styles.itemDate}>{formatDate(item.scanned_at)}</Text>
+                    </View>
                   </View>
-                  <View style={styles.itemTextContainer}>
-                    <Text style={styles.itemName}>{item.checkpoints?.name}</Text>
-                    <Text style={styles.itemDate}>{formatDate(item.scanned_at)}</Text>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
@@ -205,6 +211,8 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
 
   sectionTitle: { fontSize: 13, color: colors.textSecondary, textTransform: 'uppercase', fontWeight: '500', marginLeft: 16, marginBottom: 8, marginTop: 10 },
   listContainer: { backgroundColor: colors.card, borderRadius: 12, overflow: 'hidden', shadowColor: colors.text, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, marginBottom: 30 },
+  
+  historyContainerLimit: { maxHeight: 280 }, 
   
   listItemHistory: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 16, paddingHorizontal: 16, position: 'relative' },
   iconContainerGreen: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.successBg, justifyContent: 'center', alignItems: 'center', marginRight: 12, zIndex: 2 },

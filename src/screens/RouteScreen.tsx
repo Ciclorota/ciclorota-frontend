@@ -4,8 +4,9 @@ import { useFocusEffect } from '@react-navigation/native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'; 
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps'; 
 import { useTheme } from '../contexts/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -22,17 +23,29 @@ export function RouteScreen() {
           const userId = session?.user?.id;
           if (!userId) return;
 
-          const checkpointsRes = await fetch(`${API_URL}/checkpoints`);
+          const checkpointsRes = await fetch(`${API_URL}/checkpoints`, {
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          });
           const allCheckpoints = await checkpointsRes.json();
 
-          const progressRes = await fetch(`${API_URL}/progress/${userId}`);
+          const progressRes = await fetch(`${API_URL}/progress/${userId}`, {
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          });
           const progressData = await progressRes.json();
-          
-          const visitedIds = progressData.historico?.map((checkin: any) => checkin.checkpoints.id) || [];
+          const visitedIdsBackend = progressData.historico?.map((checkin: any) => checkin.checkpoints.id) || [];
+
+          const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
+          let visitedIdsLocal: string[] = [];
+          if (offlineData) {
+            const checkinsArray = JSON.parse(offlineData);
+            visitedIdsLocal = checkinsArray.map((c: any) => c.checkpoint_id);
+          }
+
+          const allVisitedIds = [...visitedIdsBackend, ...visitedIdsLocal];
 
           const mergedData = allCheckpoints.map((cp: any) => ({
             ...cp,
-            isVisited: visitedIds.includes(cp.id)
+            isVisited: allVisitedIds.includes(cp.id)
           }));
 
           setRouteData(mergedData);
@@ -57,14 +70,19 @@ export function RouteScreen() {
     );
   }
 
+  const isRouteCompleted = routeData.length > 0 && routeData.every(point => point.isVisited);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         <View style={styles.headerContainer}>
           <Text style={styles.largeTitle}>A Rota</Text>
-          <Text style={styles.subtitle}>
-            Explore os pontos da Mata Atlântica. Visite todos para desbloquear o seu certificado!
+          
+          <Text style={[styles.subtitle, isRouteCompleted && {   }]}>
+            {isRouteCompleted 
+              ? "Parabéns! Você completou toda a rota da Mata Atlântica. O seu certificado já está disponível!" 
+              : "Explore os pontos da Mata Atlântica. Visite todos para desbloquear o seu certificado!"}
           </Text>
 
           <View style={styles.mapContainer}>
@@ -78,11 +96,25 @@ export function RouteScreen() {
                 longitudeDelta: 0.5,
               }}
             >
+              {routeData.length > 1 && (
+                <Polyline
+                  coordinates={routeData
+                    .filter(p => p.latitude != null && p.longitude != null)
+                    .map(p => ({
+                      latitude: Number(p.latitude),
+                      longitude: Number(p.longitude),
+                    }))}
+                  strokeColor={colors.danger} 
+                  strokeWidth={4} 
+                  lineDashPattern={[10, 10]} 
+                />
+              )}
+
               {routeData.map((point) => {
                 if (point.latitude != null && point.longitude != null) {
                   return (
                     <Marker
-                      key={point.id}
+                      key={`${point.id}-${point.isVisited}`}
                       coordinate={{
                         latitude: Number(point.latitude),
                         longitude: Number(point.longitude),

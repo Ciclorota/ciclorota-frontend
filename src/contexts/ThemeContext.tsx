@@ -26,7 +26,7 @@ export const darkColors = {
   background: '#000000',
   card: '#1C1C1E',
   text: '#FFFFFF',
-  textSecondary: '#EBEBF5', // 60% opacity white usually, but let's use a solid color
+  textSecondary: '#EBEBF5',
   primary: '#0A84FF',
   border: '#38383A',
   borderLight: '#2C2C2E',
