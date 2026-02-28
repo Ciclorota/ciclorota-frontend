@@ -1,15 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppAlert } from '../components/AppAlertModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export function ProfileScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
+  const { showAlert, alertModal } = useAppAlert();
   const [profile, setProfile] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
@@ -168,7 +170,16 @@ export function ProfileScreen({ navigation }: any) {
           
           <View style={styles.menuDivider} />
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => Alert.alert('Em breve', 'Central de ajuda estará disponível na próxima versão.')}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() =>
+              showAlert({
+                title: 'Em breve',
+                message: 'Central de ajuda estará disponível na próxima versão.',
+                variant: 'info',
+              })
+            }
+          >
             <View style={[styles.menuIconBg, { backgroundColor: isDarkMode ? colors.dangerBg : '#FFF0F0' }]}>
               <Ionicons name="help-circle-outline" size={20} color={colors.danger} />
             </View>
@@ -185,6 +196,8 @@ export function ProfileScreen({ navigation }: any) {
           <Ionicons name="log-out-outline" size={22} color={colors.danger} />
           <Text style={styles.destructiveButtonText}>Sair da Conta</Text>
         </TouchableOpacity>
+
+        {alertModal}
 
       </ScrollView>
     </SafeAreaView>

@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, Switch, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, Switch, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppAlert } from '../components/AppAlertModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export function SettingsScreen({ navigation }: any) {
   const { isDarkMode, toggleTheme, colors } = useTheme();
+  const { showAlert, alertModal } = useAppAlert();
   const [syncing, setSyncing] = useState(false);
   
   const styles = getStyles(colors, isDarkMode);
@@ -23,13 +25,21 @@ export function SettingsScreen({ navigation }: any) {
 
       const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
       if (!offlineData) {
-        Alert.alert('Tudo Atualizado ✅', 'Não há check-ins pendentes para sincronizar.');
+        showAlert({
+          title: 'Tudo Atualizado ✅',
+          message: 'Não há check-ins pendentes para sincronizar.',
+          variant: 'info',
+        });
         return;
       }
 
       const checkinsArray = JSON.parse(offlineData);
       if (checkinsArray.length === 0) {
-        Alert.alert('Tudo Atualizado ✅', 'Não há check-ins pendentes para sincronizar.');
+        showAlert({
+          title: 'Tudo Atualizado ✅',
+          message: 'Não há check-ins pendentes para sincronizar.',
+          variant: 'info',
+        });
         return;
       }
 
@@ -41,62 +51,76 @@ export function SettingsScreen({ navigation }: any) {
 
       if (syncResponse.ok) {
         await AsyncStorage.removeItem('@ciclorota_checkins');
-        Alert.alert('Sincronizado ☁️', 'Todos os seus pontos foram enviados com sucesso!');
+        showAlert({
+          title: 'Sincronizado ☁️',
+          message: 'Todos os seus pontos foram enviados com sucesso!',
+          variant: 'success',
+        });
       } else if (syncResponse.status === 409) {
         await AsyncStorage.removeItem('@ciclorota_checkins');
-        Alert.alert('Aviso', 'Os pontos pendentes já tinham sido visitados.');
+        showAlert({
+          title: 'Aviso',
+          message: 'Os pontos pendentes já tinham sido visitados.',
+          variant: 'warning',
+        });
       } else if (syncResponse.status >= 400) {
         await AsyncStorage.removeItem('@ciclorota_checkins');
-        Alert.alert('Fila Limpa 🧹', 'Foram encontrados dados inválidos que estavam a travar o envio. A fila foi limpa.');
+        showAlert({
+          title: 'Fila Limpa 🧹',
+          message: 'Foram encontrados dados inválidos que estavam a travar o envio. A fila foi limpa.',
+          variant: 'warning',
+        });
       }
     } catch (error) {
-      Alert.alert('Erro de Conexão', 'Não foi possível ligar ao servidor. Tente novamente mais tarde.');
+      showAlert({
+        title: 'Erro de Conexão',
+        message: 'Não foi possível ligar ao servidor. Tente novamente mais tarde.',
+        variant: 'error',
+      });
     } finally {
       setSyncing(false);
     }
   };
 
   const handleClearData = () => {
-    Alert.alert(
-      'Limpar Dados Locais',
-      'Tem certeza de que deseja apagar o cache e os check-ins pendentes? Esta ação não pode ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Limpar', 
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem('@ciclorota_checkins');
-            Alert.alert('Pronto!', 'Os dados locais foram apagados.');
-          }
-        }
-      ]
-    );
+    showAlert({
+      title: 'Limpar Dados Locais',
+      message: 'Tem certeza de que deseja apagar o cache e os check-ins pendentes? Esta ação não pode ser desfeita.',
+      variant: 'warning',
+      cancelText: 'Cancelar',
+      confirmText: 'Limpar',
+      onConfirm: async () => {
+        await AsyncStorage.removeItem('@ciclorota_checkins');
+        showAlert({
+          title: 'Pronto!',
+          message: 'Os dados locais foram apagados.',
+          variant: 'success',
+        });
+      },
+    });
   };
 
   // 3. EXCLUIR MINHA CONTA
   const handleDeleteAccount = () => {
-    Alert.alert(
-      '🚨 Excluir Minha Conta',
-      'Tem certeza absoluta? Todos os seus check-ins, certificados e progresso na Mata Atlântica serão apagados permanentemente.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Sim, excluir tudo', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await AsyncStorage.removeItem('@ciclorota_checkins');
-              
-              
-              await supabase.auth.signOut();
-            } catch (error) {
-              Alert.alert('Erro', 'Não foi possível excluir a conta neste momento.');
-            }
-          }
+    showAlert({
+      title: '🚨 Excluir Minha Conta',
+      message: 'Tem certeza absoluta? Todos os seus check-ins, certificados e progresso na Mata Atlântica serão apagados permanentemente.',
+      variant: 'error',
+      cancelText: 'Cancelar',
+      confirmText: 'Sim, excluir tudo',
+      onConfirm: async () => {
+        try {
+          await AsyncStorage.removeItem('@ciclorota_checkins');
+          await supabase.auth.signOut();
+        } catch (error) {
+          showAlert({
+            title: 'Erro',
+            message: 'Não foi possível excluir a conta neste momento.',
+            variant: 'error',
+          });
         }
-      ]
-    );
+      },
+    });
   };
 
   return (
@@ -166,6 +190,8 @@ export function SettingsScreen({ navigation }: any) {
         </View>
 
       </View>
+
+      {alertModal}
     </SafeAreaView>
   );
 }

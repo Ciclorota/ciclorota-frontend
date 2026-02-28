@@ -1,18 +1,26 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, View, TextInput, Button, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TextInput, Button, Text, TouchableOpacity } from 'react-native';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppAlert } from '../components/AppAlertModal';
 
 export function LoginScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { showAlert, alertModal } = useAppAlert();
 
   async function signInWithEmail() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) Alert.alert('Erro ao entrar', error.message);
+    if (error) {
+      showAlert({
+        title: 'Erro ao entrar',
+        message: error.message,
+        variant: 'error',
+      });
+    }
     setLoading(false);
   }
 
@@ -48,6 +56,8 @@ export function LoginScreen({ navigation }: any) {
       <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.linkButton}>
         <Text style={styles.linkText}>Não possui uma conta ainda? Crie aqui.</Text>
       </TouchableOpacity>
+
+      {alertModal}
     </View>
   );
 }

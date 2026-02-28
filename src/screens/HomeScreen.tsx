@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, ScrollView, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, SafeAreaView, ScrollView, StatusBar, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 // @ts-ignore
@@ -7,11 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppAlert } from '../components/AppAlertModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export function HomeScreen({ session, navigation }: any) {
   const { colors, isDarkMode } = useTheme();
+  const { showAlert, alertModal } = useAppAlert();
   const [profile, setProfile] = useState<any>(null);
   const [totalCheckpoints, setTotalCheckpoints] = useState(0); 
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,11 @@ export function HomeScreen({ session, navigation }: any) {
           await AsyncStorage.removeItem('@ciclorota_checkins');
           setOfflineCount(0);
           setValidOfflineCount(0);
-          Alert.alert('Sincronizado ☁️', 'Os check-ins salvos offline foram enviados!');
+          showAlert({
+            title: 'Sincronizado ☁️',
+            message: 'Os check-ins salvos offline foram enviados!',
+            variant: 'success',
+          });
         } 
         else if (syncResponse.status === 409) {
           await AsyncStorage.removeItem('@ciclorota_checkins');
@@ -98,7 +104,11 @@ export function HomeScreen({ session, navigation }: any) {
           await AsyncStorage.removeItem('@ciclorota_checkins');
           setOfflineCount(0);
           setValidOfflineCount(0);
-          Alert.alert('QR Code Limpo 🧹', 'Um código inválido que estava a travar a sincronização foi descartado da fila.');
+          showAlert({
+            title: 'QR Code Limpo 🧹',
+            message: 'Um código inválido que estava a travar a sincronização foi descartado da fila.',
+            variant: 'warning',
+          });
         }
       }
 
@@ -147,16 +157,28 @@ export function HomeScreen({ session, navigation }: any) {
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert('Parabéns! 🏆', data.mensagem);
+        showAlert({
+          title: 'Parabéns! 🏆',
+          message: data.mensagem,
+          variant: 'success',
+        });
         setProfile((prev: any) => ({
           ...prev,
           estatisticas: { ...prev.estatisticas, possui_certificado: true }
         }));
       } else {
-        Alert.alert('Aviso', data.error || 'Ainda não completou a rota.');
+        showAlert({
+          title: 'Aviso',
+          message: data.error || 'Ainda não completou a rota.',
+          variant: 'warning',
+        });
       }
     } catch (error) {
-      Alert.alert('Erro', 'Verifique sua conexão.');
+      showAlert({
+        title: 'Erro',
+        message: 'Verifique sua conexão.',
+        variant: 'error',
+      });
     } finally {
       setIssuing(false);
     }
@@ -261,7 +283,7 @@ export function HomeScreen({ session, navigation }: any) {
                   ? "Sua conquista está disponível!" 
                   : progressStats.porcentagem >= 100
                     ? "Parabéns! Clique no botão abaixo para resgatar."
-                    : `Visite mais ${totalCheckpoints > 0 ? totalCheckpoints - progressStats.visitados : '...'} paradas para resgatar.`
+                    : `Visite mais ${totalCheckpoints > 0 ? totalCheckpoints - progressStats.visitados : '...'} ${(totalCheckpoints - progressStats.visitados) === 1 ? 'parada' : 'paradas'} para resgatar.`
                 }
               </Text>
             </View>
@@ -282,6 +304,8 @@ export function HomeScreen({ session, navigation }: any) {
         </View>
 
       </ScrollView>
+
+      {alertModal}
     </SafeAreaView>
   );
 }

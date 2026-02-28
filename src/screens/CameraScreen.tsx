@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppAlert } from '../components/AppAlertModal';
 
 export function CameraScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
+  const { showAlert, alertModal } = useAppAlert();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
@@ -50,14 +52,19 @@ export function CameraScreen({ navigation }: any) {
 
       await AsyncStorage.setItem('@ciclorota_checkins', JSON.stringify(checkinsArray));
 
-      Alert.alert(
-        'Ponto Registrado! 📍',
-        'Seu check-in foi salvo no passaporte. Ele será sincronizado quando houver internet.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      showAlert({
+        title: 'Ponto Registrado! 📍',
+        message: 'Seu check-in foi salvo no passaporte. Ele será sincronizado quando houver internet.',
+        variant: 'success',
+        onConfirm: () => navigation.goBack(),
+      });
 
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível salvar o check-in.');
+      showAlert({
+        title: 'Erro',
+        message: 'Não foi possível salvar o check-in.',
+        variant: 'error',
+      });
       setScanned(false);
     }
   };
@@ -78,6 +85,8 @@ export function CameraScreen({ navigation }: any) {
       <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
         <Text style={styles.cancelButtonText}>Cancelar</Text>
       </TouchableOpacity>
+
+      {alertModal}
     </View>
   );
 }

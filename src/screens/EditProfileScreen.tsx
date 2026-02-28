@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { supabase } from '../services/supabase';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppAlert } from '../components/AppAlertModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -13,8 +14,8 @@ export function EditProfileScreen({ navigation }: any) {
   const [newPhoto, setNewPhoto] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
-  const [showSuccess, setShowSuccess] = useState(false);
+
+  const { showAlert, alertModal } = useAppAlert();
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -55,7 +56,13 @@ export function EditProfileScreen({ navigation }: any) {
       });
 
       if (response.ok) {
-        setShowSuccess(true);
+        showAlert({
+          title: 'Atualizado!',
+          message: 'O seu perfil foi guardado com sucesso.',
+          variant: 'success',
+          confirmText: 'Concluído',
+          onConfirm: () => navigation.goBack(),
+        });
       } else {
         throw new Error('Falha ao salvar no banco');
       }
@@ -64,11 +71,6 @@ export function EditProfileScreen({ navigation }: any) {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleCloseSuccess = () => {
-    setShowSuccess(false);
-    navigation.goBack();
   };
 
   const styles = getStyles(colors, isDarkMode);
@@ -143,25 +145,7 @@ export function EditProfileScreen({ navigation }: any) {
 
       </KeyboardAvoidingView>
 
-      <Modal
-        visible={showSuccess}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIconBg}>
-              <Ionicons name="checkmark" size={40} color={colors.white} />
-            </View>
-            <Text style={styles.modalTitle}>Atualizado!</Text>
-            <Text style={styles.modalMessage}>O seu perfil foi guardado com sucesso.</Text>
-            
-            <TouchableOpacity style={styles.modalButton} onPress={handleCloseSuccess}>
-              <Text style={styles.modalButtonText}>Concluído</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {alertModal}
 
     </SafeAreaView>
   );
@@ -188,28 +172,4 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   input: { flex: 1, height: 50, fontSize: 17, color: colors.text },
   hintText: { fontSize: 13, color: colors.textSecondary, marginTop: 8, marginLeft: 16, lineHeight: 18 },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)', 
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '80%',
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: colors.text, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10
-  },
-  modalIconBg: {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: colors.success, 
-    justifyContent: 'center', alignItems: 'center', marginBottom: 16
-  },
-  modalTitle: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 8 },
-  modalMessage: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  modalButton: {
-    backgroundColor: colors.primary, width: '100%', paddingVertical: 14, borderRadius: 14, alignItems: 'center'
-  },
-  modalButtonText: { color: colors.white, fontSize: 17, fontWeight: '700' }
 });
