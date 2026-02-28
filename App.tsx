@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { View } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -64,6 +65,21 @@ function MainTabs({ session }: any) {
 function RootNavigator() {
   const { colors, isDarkMode } = useTheme();
   const [session, setSession] = useState<Session | null>(null);
+  const appBackgroundStyle = { flex: 1, backgroundColor: colors.background };
+
+  const navigationTheme = {
+    ...DefaultTheme,
+    dark: isDarkMode,
+    colors: {
+      ...DefaultTheme.colors,
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.card,
+      text: colors.text,
+      border: colors.borderLight,
+      notification: colors.primary,
+    },
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -76,56 +92,57 @@ function RootNavigator() {
 
   if (!session && session !== undefined) {
     return (
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <View style={appBackgroundStyle}>
+        <NavigationContainer theme={navigationTheme}>
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background },
+              animation: 'fade_from_bottom',
+              animationDuration: 220,
+              gestureEnabled: true,
+            }}
+          >
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </View>
     );
   }
 
   return (
-    <NavigationContainer theme={{
-      ...DefaultTheme,
-      dark: isDarkMode,
-      colors: {
-        ...DefaultTheme.colors,
-        primary: colors.primary,
-        background: colors.background,
-        card: colors.card,
-        text: colors.text,
-        border: colors.borderLight,
-        notification: colors.primary,
-      },
-    }}>
-      <Stack.Navigator screenOptions={{ 
-        headerShown: false, 
-        contentStyle: { backgroundColor: colors.background },
-      }}>
-        <Stack.Screen name="MainTabs">
-          {(props) => <MainTabs {...props} session={session} />}
-        </Stack.Screen>
-        
-        <Stack.Screen 
-          name="Camera" 
-          component={CameraScreen} 
-          options={{ presentation: 'transparentModal' }} 
-        />
+    <View style={appBackgroundStyle}>
+      <NavigationContainer theme={navigationTheme}>
+        <Stack.Navigator screenOptions={{ 
+          headerShown: false, 
+          contentStyle: { backgroundColor: colors.background },
+          animation: 'fade',
+        }}>
+          <Stack.Screen name="MainTabs">
+            {(props) => <MainTabs {...props} session={session} />}
+          </Stack.Screen>
+          
+          <Stack.Screen 
+            name="Camera" 
+            component={CameraScreen} 
+            options={{ presentation: 'transparentModal', animation: 'fade' }} 
+          />
 
-        <Stack.Screen 
-          name="EditProfile" 
-          component={EditProfileScreen} 
-          options={{ presentation: 'transparentModal', animation: 'slide_from_right' }} 
-        />
+          <Stack.Screen 
+            name="EditProfile" 
+            component={EditProfileScreen} 
+            options={{ presentation: 'transparentModal', animation: 'fade' }} 
+          />
 
-        <Stack.Screen 
-          name="Settings" 
-          component={SettingsScreen} 
-          options={{ presentation: 'transparentModal', animation: 'slide_from_right' }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+          <Stack.Screen 
+            name="Settings" 
+            component={SettingsScreen} 
+            options={{ presentation: 'transparentModal', animation: 'fade' }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </View>
   );
 }
 
