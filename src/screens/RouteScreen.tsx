@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Platform, Linking, Modal, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,21 @@ export function RouteScreen() {
   const { colors, isDarkMode } = useTheme();
   const [routeData, setRouteData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPoint, setSelectedPoint] = useState<any>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const resolveMapUrl = (point: any): string => {
+    const directUrl = point?.map || point?.map_url || point?.maps_url || point?.google_maps_url;
+    if (typeof directUrl === 'string' && directUrl.trim().length > 0) {
+      return directUrl.trim();
+    }
+
+    if (point?.latitude != null && point?.longitude != null) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${point.latitude},${point.longitude}`;
+    }
+
+    return '';
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -76,6 +91,7 @@ export function RouteScreen() {
 
           const mergedData = allCheckpoints.map((cp: any) => ({
             ...cp,
+            map: resolveMapUrl(cp),
             isVisited: allVisitedIds.includes(cp.id)
           }));
 
@@ -97,25 +113,6 @@ export function RouteScreen() {
   );
 
   const styles = getStyles(colors, isDarkMode);
-
-  const openDirections = (latitude: string | number, longitude: string | number) => {
-    if (!latitude || !longitude) return;
-    
-    const url = Platform.select({
-      ios: `maps://app?daddr=${latitude},${longitude}&dirflg=d`,
-      android: `google.navigation:q=${latitude},${longitude}`
-    });
-
-    if (url) {
-      Linking.canOpenURL(url).then(supported => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
-        }
-      }).catch(err => console.error('Erro ao abrir mapas:', err));
-    }
-  };
 
   if (loading && routeData.length === 0) {
     return (
@@ -198,7 +195,10 @@ export function RouteScreen() {
                   key={item.id} 
                   style={styles.listItem}
                   activeOpacity={0.7}
-                  onPress={() => openDirections(item.latitude, item.longitude)}
+                  onPress={() => {
+                    setSelectedPoint(item);
+                    setModalVisible(true);
+                  }}
                 >
                   <View style={[styles.sequenceContainer, item.isVisited ? styles.sequenceVisited : styles.sequencePending]}>
                     <Text style={[styles.sequenceText, item.isVisited ? styles.sequenceVisitedText : styles.sequencePendingText]}>
@@ -229,6 +229,50 @@ export function RouteScreen() {
         </View>
 
       </ScrollView>
+
+      {selectedPoint && (
+        <Modal
+          visible={modalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalBackground}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+              
+              <Text style={styles.modalTitle}>{selectedPoint.name}</Text>
+              
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carouselContainer}>
+                <View style={[styles.imagePlaceholder, { backgroundColor: colors.borderLight }]} />
+                <View style={[styles.imagePlaceholder, { backgroundColor: colors.borderLight }]} />
+                <View style={[styles.imagePlaceholder, { backgroundColor: colors.borderLight }]} />
+              </ScrollView>
+
+              <ScrollView style={styles.modalDescriptionContainer}>
+                <Text style={styles.modalDescription}>{selectedPoint.description}</Text>
+              </ScrollView>
+
+              <TouchableOpacity 
+                style={styles.routeButton} 
+                onPress={() => {
+                  const mapUrl = resolveMapUrl(selectedPoint);
+                  if (mapUrl) {
+                    Linking.openURL(mapUrl).catch((err) => console.error('Erro ao abrir o link do mapa:', err));
+                  } else {
+                    console.log('Nenhum link de mapa disponível para esta rota.');
+                  }
+                }}
+              >
+                <Ionicons name="map" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={styles.routeButtonText}>Traçar Rota</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -263,4 +307,15 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   itemDescription: { fontSize: 15, color: colors.textSecondary },
   iconContainer: { justifyContent: 'center', alignItems: 'center', width: 32 },
   divider: { position: 'absolute', bottom: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  
+  modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, height: '85%' },
+  closeButton: { alignSelf: 'flex-end', padding: 8 },
+  modalTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text, marginBottom: 16 },
+  carouselContainer: { flexDirection: 'row', marginBottom: 20, maxHeight: 220 },
+  imagePlaceholder: { width: 320, height: 220, borderRadius: 12, marginRight: 12 },
+  modalDescriptionContainer: { flex: 1, marginBottom: 24 },
+  modalDescription: { fontSize: 16, color: colors.textSecondary, lineHeight: 24 },
+  routeButton: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12 },
+  routeButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' }
 });
