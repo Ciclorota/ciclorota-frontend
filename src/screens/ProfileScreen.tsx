@@ -4,27 +4,35 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../services/supabase';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
 import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
+import { fetchAuthMe } from '../services/api/auth';
+import { fetchCurrentUserProgress } from '../services/api/profile';
+import { getCurrentSession, signOut } from '../services/auth';
+import { ProgressHistoryItem, UserProfile } from '../types/passport';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const PROFILE_CACHE_KEY = '@ciclorota_profile_cache';
+
+function getProfileCacheKey(userId: string) {
+  return `${PROFILE_CACHE_KEY}:${userId}`;
+}
 
 export function ProfileScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
   const { showAlert, alertModal } = useAppAlert();
-  const [profile, setProfile] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [history, setHistory] = useState<ProgressHistoryItem[]>([]);
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfileAndHistory = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getCurrentSession();
       const userId = session?.user?.id;
+      const cacheKey = userId ? getProfileCacheKey(userId) : PROFILE_CACHE_KEY;
 
       if (session?.user?.created_at) {
         setUserCreatedAt(session.user.created_at);
@@ -40,7 +48,7 @@ export function ProfileScreen({ navigation }: any) {
         setProfile(cachedSnapshot.profile);
       }
       if (Array.isArray(cachedSnapshot?.progressHistory)) {
-        const sortedFromSnapshot = [...cachedSnapshot.progressHistory].sort((a: any, b: any) => {
+        const sortedFromSnapshot = [...cachedSnapshot.progressHistory].sort((a, b) => {
           return new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime();
         });
         setHistory(sortedFromSnapshot);
@@ -49,7 +57,9 @@ export function ProfileScreen({ navigation }: any) {
         setLoading(false);
       }
 
-      const cachedProfileData = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+      const cachedProfileData =
+        (await AsyncStorage.getItem(cacheKey)) ||
+        (await AsyncStorage.getItem(PROFILE_CACHE_KEY));
       if (cachedProfileData) {
         const parsedCache = JSON.parse(cachedProfileData);
         if (parsedCache?.profile) {
@@ -64,28 +74,27 @@ export function ProfileScreen({ navigation }: any) {
         setLoading(false);
       }
 
-      let latestProfile: any = null;
-      let latestHistory: any[] = [];
+      const [authSnapshot, progressData] = await Promise.all([
+        fetchAuthMe(),
+        fetchCurrentUserProgress(),
+      ]);
 
-      const profileRes = await fetch(`${API_URL}/profiles/${userId}`);
-      if (profileRes.ok) {
-        latestProfile = await profileRes.json();
-        setProfile(latestProfile);
-      }
+      const latestProfile = authSnapshot.profile
+        ? {
+            ...authSnapshot.profile,
+            email: authSnapshot.user.email,
+          }
+        : null;
+      const latestHistory = [...(progressData.historico || [])].sort((a, b) => {
+        return new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime();
+      });
 
-      const progressRes = await fetch(`${API_URL}/progress/${userId}`);
-      if (progressRes.ok) {
-        const progressData = await progressRes.json();
-        const sortedHistory = (progressData.historico || []).sort((a: any, b: any) => {
-          return new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime();
-        });
-        latestHistory = sortedHistory;
-        setHistory(latestHistory);
-      }
+      setProfile(latestProfile);
+      setHistory(latestHistory);
 
       if (latestProfile) {
         await AsyncStorage.setItem(
-          PROFILE_CACHE_KEY,
+          cacheKey,
           JSON.stringify({
             profile: latestProfile,
             history: latestHistory,
@@ -110,7 +119,7 @@ export function ProfileScreen({ navigation }: any) {
 
   useFocusEffect(
     useCallback(() => {
-      fetchProfileAndHistory();
+      void fetchProfileAndHistory();
     }, [])
   );
 
@@ -251,7 +260,7 @@ export function ProfileScreen({ navigation }: any) {
 
         <TouchableOpacity 
           style={styles.destructiveButton}
-          onPress={() => supabase.auth.signOut()}
+          onPress={() => signOut()}
         >
           <Ionicons name="log-out-outline" size={22} color={colors.danger} />
           <Text style={styles.destructiveButtonText}>Sair da Conta</Text>

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { supabase } from '../services/supabase';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { getErrorMessage } from '../lib/errors';
+import { fetchCurrentUserProfile, updateCurrentUserProfile } from '../services/api/profile';
+import { getCurrentUserId } from '../services/auth';
+import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
 
 export function EditProfileScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
@@ -21,22 +22,16 @@ export function EditProfileScreen({ navigation }: any) {
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user?.id) return;
-        
-        const res = await fetch(`${API_URL}/profiles/${session.user.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setNewName(data.full_name || '');
-          setNewPhoto(data.avatar_url || '');
-        }
+        const data = await fetchCurrentUserProfile();
+        setNewName(data.full_name || '');
+        setNewPhoto(data.avatar_url || '');
       } catch (error) {
         console.error(error);
       } finally {
         setLoading(false);
       }
     }
-    loadData();
+    void loadData();
   }, []);
 
   const handleSave = async () => {
@@ -48,26 +43,45 @@ export function EditProfileScreen({ navigation }: any) {
     setSaving(true);
     setErrorMsg(''); 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`${API_URL}/profiles/${session?.user.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: newName, avatar_url: newPhoto }),
+      const updatedProfile = await updateCurrentUserProfile({
+        full_name: newName.trim(),
+        avatar_url: newPhoto.trim() ? newPhoto.trim() : null,
       });
 
-      if (response.ok) {
-        showAlert({
-          title: 'Atualizado!',
-          message: 'O seu perfil foi guardado com sucesso.',
-          variant: 'success',
-          confirmText: 'Concluído',
-          onConfirm: () => navigation.goBack(),
+      const userId = await getCurrentUserId();
+      if (userId) {
+        const cachedSnapshot = await getUserOfflineSnapshot(userId);
+        await updateUserOfflineSnapshot(userId, {
+          profile: cachedSnapshot?.profile
+            ? {
+                ...cachedSnapshot.profile,
+                ...updatedProfile,
+              }
+            : {
+                ...updatedProfile,
+                estatisticas: {
+                  total_pontos_visitados: 0,
+                  possui_certificado: false,
+                  data_certificado: null,
+                },
+              },
         });
-      } else {
-        throw new Error('Falha ao salvar no banco');
       }
+
+      showAlert({
+        title: 'Atualizado!',
+        message: 'O seu perfil foi guardado com sucesso.',
+        variant: 'success',
+        confirmText: 'Concluído',
+        onConfirm: () => navigation.goBack(),
+      });
     } catch (error) {
-      setErrorMsg('Não foi possível salvar as alterações. Verifique sua conexão.');
+      setErrorMsg(
+        getErrorMessage(
+          error,
+          'Não foi possível salvar as alterações. Verifique sua conexão.',
+        ),
+      );
     } finally {
       setSaving(false);
     }

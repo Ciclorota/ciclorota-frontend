@@ -1,11 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  Checkpoint,
+  ProgressHistoryItem,
+  UserProfile,
+} from '../types/passport';
+
 const GLOBAL_SNAPSHOT_KEY = '@ciclorota_global_snapshot_v1';
 
 export interface UserOfflineSnapshot {
-  profile?: any;
-  checkpoints?: any[];
-  progressHistory?: any[];
+  profile?: UserProfile | null;
+  checkpoints?: Checkpoint[];
+  progressHistory?: ProgressHistoryItem[];
   savedAt?: string;
 }
 
@@ -45,4 +51,14 @@ export async function updateUserOfflineSnapshot(
   map[userId] = next;
   await AsyncStorage.setItem(GLOBAL_SNAPSHOT_KEY, JSON.stringify(map));
   return next;
+}
+
+export async function clearUserOfflineSnapshot(userId: string): Promise<void> {
+  if (!userId) {
+    return;
+  }
+
+  const map = await readSnapshotMap();
+  delete map[userId];
+  await AsyncStorage.setItem(GLOBAL_SNAPSHOT_KEY, JSON.stringify(map));
 }

@@ -1,21 +1,54 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, SafeAreaView, ScrollView, StatusBar, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import { Session } from '@supabase/supabase-js';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { supabase } from '../services/supabase';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
 import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
+import { getErrorMessage } from '../lib/errors';
+import { fetchAuthMe } from '../services/api/auth';
+import {
+  fetchCheckpoints,
+  issueCertificate,
+  syncPendingCheckins,
+} from '../services/api/passport';
+import { fetchCurrentUserProgress } from '../services/api/profile';
+import {
+  Checkpoint,
+  PendingCheckin,
+  ProgressHistoryItem,
+  UserProfile,
+} from '../types/passport';
+import { getPendingCheckins } from '../storage/checkins';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+type HomeScreenProps = {
+  navigation: any;
+  session: Session | null;
+};
 
-export function HomeScreen({ session, navigation }: any) {
+function getOfflineProgressCount(
+  checkpoints: Checkpoint[],
+  progressHistory: ProgressHistoryItem[],
+  pendingCheckins: PendingCheckin[],
+) {
+  const checkpointIds = new Set(checkpoints.map((checkpoint) => checkpoint.id));
+  const visitedIds = new Set(
+    progressHistory.map((entry) => entry.checkpoints?.id).filter(Boolean),
+  );
+
+  return [...new Set(pendingCheckins.map((checkin) => checkin.checkpoint_id))]
+    .filter((checkpointId) => checkpointIds.has(checkpointId))
+    .filter((checkpointId) => !visitedIds.has(checkpointId)).length;
+}
+
+export function HomeScreen({ session, navigation }: HomeScreenProps) {
   const { colors, isDarkMode } = useTheme();
   const { showAlert, alertModal } = useAppAlert();
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [totalCheckpoints, setTotalCheckpoints] = useState(0); 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false); 
@@ -44,7 +77,7 @@ export function HomeScreen({ session, navigation }: any) {
     return { visitados, porcentagem, mensagem, statusColor };
   }, [serverVisitedCount, totalCheckpoints, validOfflineCount, colors]);
 
-  const loadDataAndSync = async () => {
+  const loadDataAndSync = useCallback(async () => {
     const userId = session?.user?.id;
     if (!userId) {
       setLoading(false);
@@ -53,10 +86,9 @@ export function HomeScreen({ session, navigation }: any) {
     
     try {
       setSyncing(true);
-      let latestTotalCheckpoints = 0;
-      let latestProfileData: any = null;
-      let latestCheckpoints: any[] | null = null;
-      let latestProgressHistory: any[] | null = null;
+      let latestProfileData: UserProfile | null = null;
+      let latestCheckpoints: Checkpoint[] | null = null;
+      let latestProgressHistory: ProgressHistoryItem[] | null = null;
 
       const cachedSnapshot = await getUserOfflineSnapshot(userId);
       if (cachedSnapshot) {
@@ -64,97 +96,71 @@ export function HomeScreen({ session, navigation }: any) {
           setProfile(cachedSnapshot.profile);
         }
         if (Array.isArray(cachedSnapshot.checkpoints)) {
-          latestTotalCheckpoints = cachedSnapshot.checkpoints.length;
-          setTotalCheckpoints(latestTotalCheckpoints);
+          latestCheckpoints = cachedSnapshot.checkpoints;
+          setTotalCheckpoints(cachedSnapshot.checkpoints.length);
         }
         if (Array.isArray(cachedSnapshot.progressHistory)) {
+          latestProgressHistory = cachedSnapshot.progressHistory;
           setServerVisitedCount(cachedSnapshot.progressHistory.length);
         }
       }
 
-      const validIdsStr = await AsyncStorage.getItem('@ciclorota_valid_ids');
-      const visitedIdsStr = await AsyncStorage.getItem('@ciclorota_visited_ids');
-      const validIds = validIdsStr ? JSON.parse(validIdsStr) : [];
-      const visitedIds = visitedIdsStr
-        ? JSON.parse(visitedIdsStr)
-        : (cachedSnapshot?.progressHistory || []).map((checkin: any) => checkin?.checkpoints?.id).filter(Boolean);
+      const pendingCheckinsBeforeSync = await getPendingCheckins(userId);
+      setOfflineCount(pendingCheckinsBeforeSync.length);
 
-      const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
-      let checkinsArray = [];
-      if (offlineData) {
-        checkinsArray = JSON.parse(offlineData);
-        setOfflineCount(checkinsArray.length); 
-
-        if (validIds.length > 0) {
-          const uniqueValidOffline = [...new Set(checkinsArray.map((c: any) => c.checkpoint_id))]
-            .filter((id: any) => validIds.includes(id) && !visitedIds.includes(id));
-          setValidOfflineCount(uniqueValidOffline.length);
-        } else {
-          setValidOfflineCount(0);
-        }
-      } else {
-        setOfflineCount(0);
-        setValidOfflineCount(0);
+      if (latestCheckpoints && latestProgressHistory) {
+        setValidOfflineCount(
+          getOfflineProgressCount(
+            latestCheckpoints,
+            latestProgressHistory,
+            pendingCheckinsBeforeSync,
+          ),
+        );
       }
 
-      if (checkinsArray.length > 0) {
-        const syncResponse = await fetch(`${API_URL}/checkins`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(checkinsArray.map((c: any) => ({ ...c, user_id: userId }))),
+      const syncResult = await syncPendingCheckins(userId);
+      const pendingCheckinsAfterSync = await getPendingCheckins(userId);
+      setOfflineCount(pendingCheckinsAfterSync.length);
+
+      if (syncResult.status === 'success' && syncResult.syncedCount > 0) {
+        showAlert({
+          title: 'Sincronizado ☁️',
+          message: 'Os check-ins salvos offline foram enviados!',
+          variant: 'success',
         });
-        
-        if (syncResponse.ok) {
-          await AsyncStorage.removeItem('@ciclorota_checkins');
-          setOfflineCount(0);
-          setValidOfflineCount(0);
-          showAlert({
-            title: 'Sincronizado ☁️',
-            message: 'Os check-ins salvos offline foram enviados!',
-            variant: 'success',
-          });
-        } 
-        else if (syncResponse.status === 409) {
-          await AsyncStorage.removeItem('@ciclorota_checkins');
-          setOfflineCount(0);
-          setValidOfflineCount(0);
-        } 
-        else if (syncResponse.status >= 400) {
-          await AsyncStorage.removeItem('@ciclorota_checkins');
-          setOfflineCount(0);
-          setValidOfflineCount(0);
-          showAlert({
-            title: 'QR Code Limpo 🧹',
-            message: 'Um código inválido que estava a travar a sincronização foi descartado da fila.',
-            variant: 'warning',
-          });
-        }
+      } else if (syncResult.status === 'discarded') {
+        showAlert({
+          title: 'QR Code Limpo 🧹',
+          message: 'Um código inválido que estava a travar a sincronização foi descartado da fila.',
+          variant: 'warning',
+        });
       }
 
-      const cpResponse = await fetch(`${API_URL}/checkpoints`);
-      if (cpResponse.ok) {
-        const cpData = await cpResponse.json();
-        latestCheckpoints = cpData;
-        latestTotalCheckpoints = cpData.length || 0;
-        setTotalCheckpoints(latestTotalCheckpoints);
-        await AsyncStorage.setItem('@ciclorota_valid_ids', JSON.stringify(cpData.map((c: any) => c.id)));
-      }
+      const [authSnapshot, checkpoints, progressData] = await Promise.all([
+        fetchAuthMe(),
+        fetchCheckpoints(),
+        fetchCurrentUserProgress(),
+      ]);
 
-      const response = await fetch(`${API_URL}/profiles/${userId}`);
-      if (response.ok) {
-        latestProfileData = await response.json();
-        setProfile(latestProfileData);
-      }
+      latestProfileData = authSnapshot.profile
+        ? {
+            ...authSnapshot.profile,
+            email: authSnapshot.user.email,
+          }
+        : null;
+      latestCheckpoints = checkpoints;
+      latestProgressHistory = progressData.historico || [];
 
-      const progressRes = await fetch(`${API_URL}/progress/${userId}`);
-      if (progressRes.ok) {
-        const progressData = await progressRes.json();
-        const progressHistory = progressData.historico || [];
-        latestProgressHistory = progressHistory;
-        setServerVisitedCount(progressHistory.length);
-        const visitedIdsBackend = progressData.historico?.map((checkin: any) => checkin.checkpoints.id) || [];
-        await AsyncStorage.setItem('@ciclorota_visited_ids', JSON.stringify(visitedIdsBackend));
-      }
+      setProfile(latestProfileData);
+      setTotalCheckpoints(checkpoints.length);
+      setServerVisitedCount(latestProgressHistory.length);
+      setValidOfflineCount(
+        getOfflineProgressCount(
+          checkpoints,
+          latestProgressHistory,
+          pendingCheckinsAfterSync,
+        ),
+      );
 
       if (latestProfileData || latestCheckpoints || latestProgressHistory) {
         await updateUserOfflineSnapshot(userId, {
@@ -165,12 +171,15 @@ export function HomeScreen({ session, navigation }: any) {
       }
 
     } catch (error) {
-      console.log('Modo Offline: Sem conexão. A matemática blindada segurou os erros!');
+      console.log(
+        'Modo offline ativado ou erro no servidor:',
+        getErrorMessage(error, 'Falha ao sincronizar dados.'),
+      );
     } finally {
       setSyncing(false);
       setLoading(false);
     }
-  };
+  }, [session, showAlert]);
 
   const handleIssueCertificate = async () => {
     const userId = session?.user?.id;
@@ -178,23 +187,25 @@ export function HomeScreen({ session, navigation }: any) {
 
     setIssuing(true);
     try {
-      const response = await fetch(`${API_URL}/certificates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      });
+      const data = await issueCertificate();
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (data.mensagem) {
         showAlert({
           title: 'Parabéns! 🏆',
           message: data.mensagem,
           variant: 'success',
         });
-        const updatedProfile = {
-          ...profile,
-          estatisticas: { ...profile?.estatisticas, possui_certificado: true }
+        const updatedProfile: UserProfile = {
+          id: profile?.id ?? userId,
+          email: profile?.email,
+          full_name: profile?.full_name ?? null,
+          avatar_url: profile?.avatar_url ?? null,
+          estatisticas: {
+            total_pontos_visitados:
+              profile?.estatisticas?.total_pontos_visitados ?? 0,
+            possui_certificado: true,
+            data_certificado: profile?.estatisticas?.data_certificado ?? null,
+          }
         };
         setProfile(updatedProfile);
         await updateUserOfflineSnapshot(userId, {
@@ -218,7 +229,11 @@ export function HomeScreen({ session, navigation }: any) {
     }
   };
 
-  useFocusEffect(useCallback(() => { loadDataAndSync(); }, [session]));
+  useFocusEffect(
+    useCallback(() => {
+      void loadDataAndSync();
+    }, [loadDataAndSync]),
+  );
 
   const styles = getStyles(colors, isDarkMode);
 

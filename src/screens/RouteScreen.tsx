@@ -3,23 +3,36 @@ import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, To
 import { useFocusEffect } from '@react-navigation/native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../services/supabase';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps'; 
 import { useTheme } from '../contexts/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { RouteMap } from '../components/RouteMap';
 import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
+import { fetchCheckpoints } from '../services/api/passport';
+import { fetchCurrentUserProgress } from '../services/api/profile';
+import { getCurrentSession } from '../services/auth';
+import { getPendingCheckins } from '../storage/checkins';
+import { Checkpoint, RouteCheckpoint } from '../types/passport';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const ROUTE_CACHE_KEY = '@ciclorota_route_cache';
+
+type RouteMapSource = Checkpoint & {
+  map_url?: string | null;
+  maps_url?: string | null;
+  google_maps_url?: string | null;
+};
+
+function getRouteCacheKey(userId: string) {
+  return `${ROUTE_CACHE_KEY}:${userId}`;
+}
 
 export function RouteScreen() {
   const { colors, isDarkMode } = useTheme();
-  const [routeData, setRouteData] = useState<any[]>([]);
+  const [routeData, setRouteData] = useState<RouteCheckpoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPoint, setSelectedPoint] = useState<any>(null);
+  const [selectedPoint, setSelectedPoint] = useState<RouteCheckpoint | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const resolveMapUrl = (point: any): string => {
+  const resolveMapUrl = (point: RouteMapSource): string => {
     const directUrl = point?.map || point?.map_url || point?.maps_url || point?.google_maps_url;
     if (typeof directUrl === 'string' && directUrl.trim().length > 0) {
       return directUrl.trim();
@@ -37,29 +50,39 @@ export function RouteScreen() {
       async function fetchRouteProgress() {
         setLoading(true);
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const session = await getCurrentSession();
           const userId = session?.user?.id;
           if (!userId) {
             setLoading(false);
             return;
           }
+          const routeCacheKey = getRouteCacheKey(userId);
+          const pendingCheckins = await getPendingCheckins(userId);
+          const pendingIds = new Set(
+            pendingCheckins.map((checkin) => checkin.checkpoint_id),
+          );
 
           const cachedSnapshot = await getUserOfflineSnapshot(userId);
           if (cachedSnapshot?.checkpoints && cachedSnapshot?.progressHistory) {
-            const visitedFromSnapshot = (cachedSnapshot.progressHistory || [])
-              .map((checkin: any) => checkin?.checkpoints?.id)
-              .filter(Boolean);
+            const visitedFromSnapshot = new Set(
+              (cachedSnapshot.progressHistory || [])
+                .map((checkin) => checkin?.checkpoints?.id)
+                .filter(Boolean),
+            );
 
-            const mergedFromSnapshot = (cachedSnapshot.checkpoints || []).map((cp: any) => ({
+            const mergedFromSnapshot = (cachedSnapshot.checkpoints || []).map((cp) => ({
               ...cp,
-              isVisited: visitedFromSnapshot.includes(cp.id),
+              map: resolveMapUrl(cp),
+              isVisited: visitedFromSnapshot.has(cp.id) || pendingIds.has(cp.id),
             }));
 
             setRouteData(mergedFromSnapshot);
             setLoading(false);
           }
 
-          const cachedRoute = await AsyncStorage.getItem(ROUTE_CACHE_KEY);
+          const cachedRoute =
+            (await AsyncStorage.getItem(routeCacheKey)) ||
+            (await AsyncStorage.getItem(ROUTE_CACHE_KEY));
           if (cachedRoute) {
             const parsedCache = JSON.parse(cachedRoute);
             if (Array.isArray(parsedCache)) {
@@ -68,35 +91,25 @@ export function RouteScreen() {
             }
           }
 
-          const checkpointsRes = await fetch(`${API_URL}/checkpoints`, {
-            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-          });
-          const allCheckpoints = await checkpointsRes.json();
-
-          const progressRes = await fetch(`${API_URL}/progress/${userId}`, {
-            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-          });
-          const progressData = await progressRes.json();
+          const [allCheckpoints, progressData] = await Promise.all([
+            fetchCheckpoints(),
+            fetchCurrentUserProgress(),
+          ]);
           const latestProgressHistory = progressData.historico || [];
-          const visitedIdsBackend = latestProgressHistory.map((checkin: any) => checkin.checkpoints.id) || [];
+          const visitedIdsBackend = new Set(
+            latestProgressHistory
+              .map((checkin) => checkin.checkpoints?.id)
+              .filter(Boolean),
+          );
 
-          const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
-          let visitedIdsLocal: string[] = [];
-          if (offlineData) {
-            const checkinsArray = JSON.parse(offlineData);
-            visitedIdsLocal = checkinsArray.map((c: any) => c.checkpoint_id);
-          }
-
-          const allVisitedIds = [...visitedIdsBackend, ...visitedIdsLocal];
-
-          const mergedData = allCheckpoints.map((cp: any) => ({
+          const mergedData = allCheckpoints.map((cp) => ({
             ...cp,
             map: resolveMapUrl(cp),
-            isVisited: allVisitedIds.includes(cp.id)
+            isVisited: visitedIdsBackend.has(cp.id) || pendingIds.has(cp.id),
           }));
 
           setRouteData(mergedData);
-          await AsyncStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(mergedData));
+          await AsyncStorage.setItem(routeCacheKey, JSON.stringify(mergedData));
           await updateUserOfflineSnapshot(userId, {
             checkpoints: allCheckpoints,
             progressHistory: latestProgressHistory,
@@ -138,48 +151,7 @@ export function RouteScreen() {
           </Text>
 
           <View style={styles.mapContainer}>
-            <MapView
-              provider={PROVIDER_GOOGLE} 
-              style={styles.map}
-              initialRegion={{
-                latitude: -23.822679513450304, 
-                longitude: -46.47649313140532,
-                latitudeDelta: 0.5, 
-                longitudeDelta: 0.5,
-              }}
-            >
-              {routeData.length > 1 && (
-                <Polyline
-                  coordinates={routeData
-                    .filter(p => p.latitude != null && p.longitude != null)
-                    .map(p => ({
-                      latitude: Number(p.latitude),
-                      longitude: Number(p.longitude),
-                    }))}
-                  strokeColor={colors.danger} 
-                  strokeWidth={4} 
-                  lineDashPattern={[10, 10]} 
-                />
-              )}
-
-              {routeData.map((point) => {
-                if (point.latitude != null && point.longitude != null) {
-                  return (
-                    <Marker
-                      key={`${point.id}-${point.isVisited}`}
-                      coordinate={{
-                        latitude: Number(point.latitude),
-                        longitude: Number(point.longitude),
-                      }}
-                      title={point.name}
-                      description={point.isVisited ? "✅ Visitado!" : "🔒 Ponto Pendente"}
-                      pinColor={point.isVisited ? colors.success : colors.primary} 
-                    />
-                  );
-                }
-                return null;
-              })}
-            </MapView>
+            <RouteMap colors={colors} routeData={routeData} />
           </View>
 
           <Text style={styles.sectionTitle}>CHECKPOINTS</Text>
@@ -290,7 +262,6 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
     shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
     backgroundColor: colors.borderLight,
   },
-  map: { ...StyleSheet.absoluteFillObject },
 
   sectionTitle: { fontSize: 13, color: colors.textSecondary, textTransform: 'uppercase', fontWeight: '500', marginBottom: 8 },
   listWrapper: { paddingHorizontal: 20 },

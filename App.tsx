@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
@@ -7,7 +7,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 
-import { supabase } from './src/services/supabase';
+import { useAuthSession } from './src/hooks/useAuthSession';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -64,7 +64,7 @@ function MainTabs({ session }: any) {
 
 function RootNavigator() {
   const { colors, isDarkMode } = useTheme();
-  const [session, setSession] = useState<Session | null>(null);
+  const { session, isLoading } = useAuthSession();
   const appBackgroundStyle = { flex: 1, backgroundColor: colors.background };
 
   const navigationTheme = {
@@ -81,14 +81,9 @@ function RootNavigator() {
     },
   };
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-  }, []);
+  if (isLoading) {
+    return <View style={appBackgroundStyle} />;
+  }
 
   if (!session && session !== undefined) {
     return (

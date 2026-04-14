@@ -3,11 +3,21 @@ import { View, Text, StyleSheet, SafeAreaView, Switch, TouchableOpacity, Platfor
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../services/supabase';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
+import { syncPendingCheckins } from '../services/api/passport';
+import { getCurrentUserId, signOut } from '../services/auth';
+import {
+  clearUserOfflineSnapshot,
+} from '../services/offlineCache';
+import {
+  clearPendingCheckins,
+  getPendingCheckinsCount,
+} from '../storage/checkins';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const PROFILE_CACHE_KEY = '@ciclorota_profile_cache';
+const ROUTE_CACHE_KEY = '@ciclorota_route_cache';
 
 export function SettingsScreen({ navigation }: any) {
   const { isDarkMode, toggleTheme, colors } = useTheme();
@@ -19,12 +29,11 @@ export function SettingsScreen({ navigation }: any) {
   const handleForceSync = async () => {
     try {
       setSyncing(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      const userId = await getCurrentUserId();
       if (!userId) return;
 
-      const offlineData = await AsyncStorage.getItem('@ciclorota_checkins');
-      if (!offlineData) {
+      const pendingCount = await getPendingCheckinsCount(userId);
+      if (pendingCount === 0) {
         showAlert({
           title: 'Tudo Atualizado ✅',
           message: 'Não há check-ins pendentes para sincronizar.',
@@ -33,38 +42,21 @@ export function SettingsScreen({ navigation }: any) {
         return;
       }
 
-      const checkinsArray = JSON.parse(offlineData);
-      if (checkinsArray.length === 0) {
-        showAlert({
-          title: 'Tudo Atualizado ✅',
-          message: 'Não há check-ins pendentes para sincronizar.',
-          variant: 'info',
-        });
-        return;
-      }
+      const syncResult = await syncPendingCheckins(userId);
 
-      const syncResponse = await fetch(`${API_URL}/checkins`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(checkinsArray.map((c: any) => ({ ...c, user_id: userId }))),
-      });
-
-      if (syncResponse.ok) {
-        await AsyncStorage.removeItem('@ciclorota_checkins');
+      if (syncResult.status === 'success') {
         showAlert({
           title: 'Sincronizado ☁️',
           message: 'Todos os seus pontos foram enviados com sucesso!',
           variant: 'success',
         });
-      } else if (syncResponse.status === 409) {
-        await AsyncStorage.removeItem('@ciclorota_checkins');
+      } else if (syncResult.status === 'conflict') {
         showAlert({
           title: 'Aviso',
           message: 'Os pontos pendentes já tinham sido visitados.',
           variant: 'warning',
         });
-      } else if (syncResponse.status >= 400) {
-        await AsyncStorage.removeItem('@ciclorota_checkins');
+      } else if (syncResult.status === 'discarded') {
         showAlert({
           title: 'Fila Limpa 🧹',
           message: 'Foram encontrados dados inválidos que estavam a travar o envio. A fila foi limpa.',
@@ -90,7 +82,17 @@ export function SettingsScreen({ navigation }: any) {
       cancelText: 'Cancelar',
       confirmText: 'Limpar',
       onConfirm: async () => {
-        await AsyncStorage.removeItem('@ciclorota_checkins');
+        const userId = await getCurrentUserId();
+        await clearPendingCheckins(userId ?? undefined);
+        if (userId) {
+          await clearUserOfflineSnapshot(userId);
+          await AsyncStorage.removeItem(`${PROFILE_CACHE_KEY}:${userId}`);
+          await AsyncStorage.removeItem(`${ROUTE_CACHE_KEY}:${userId}`);
+        }
+        await AsyncStorage.removeItem(PROFILE_CACHE_KEY);
+        await AsyncStorage.removeItem(ROUTE_CACHE_KEY);
+        await AsyncStorage.removeItem('@ciclorota_valid_ids');
+        await AsyncStorage.removeItem('@ciclorota_visited_ids');
         showAlert({
           title: 'Pronto!',
           message: 'Os dados locais foram apagados.',
@@ -110,8 +112,14 @@ export function SettingsScreen({ navigation }: any) {
       confirmText: 'Sim, excluir tudo',
       onConfirm: async () => {
         try {
-          await AsyncStorage.removeItem('@ciclorota_checkins');
-          await supabase.auth.signOut();
+          const userId = await getCurrentUserId();
+          await clearPendingCheckins(userId ?? undefined);
+          if (userId) {
+            await clearUserOfflineSnapshot(userId);
+            await AsyncStorage.removeItem(`${PROFILE_CACHE_KEY}:${userId}`);
+            await AsyncStorage.removeItem(`${ROUTE_CACHE_KEY}:${userId}`);
+          }
+          await signOut();
         } catch (error) {
           showAlert({
             title: 'Erro',

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
+import { getCurrentUserId } from '../services/auth';
+import { addPendingCheckin } from '../storage/checkins';
 
 export function CameraScreen({ navigation }: any) {
   const { colors, isDarkMode } = useTheme();
@@ -40,17 +42,13 @@ export function CameraScreen({ navigation }: any) {
     setScanned(true);
     
     try {
-      const existingCheckins = await AsyncStorage.getItem('@ciclorota_checkins');
-      let checkinsArray = existingCheckins ? JSON.parse(existingCheckins) : [];
+      const userId = await getCurrentUserId();
 
-      const newCheckin = {
+      await addPendingCheckin({
         checkpoint_id: data, 
         scanned_at: new Date().toISOString(),
-      };
-      
-      checkinsArray.push(newCheckin);
-
-      await AsyncStorage.setItem('@ciclorota_checkins', JSON.stringify(checkinsArray));
+        user_id: userId ?? undefined,
+      });
 
       showAlert({
         title: 'Ponto Registrado! 📍',
