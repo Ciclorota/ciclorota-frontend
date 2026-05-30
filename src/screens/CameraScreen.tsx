@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppAlert } from '../components/AppAlertModal';
@@ -12,8 +13,19 @@ export function CameraScreen({ navigation }: any) {
   const { showAlert, alertModal } = useAppAlert();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [loadingGPS, setLoadingGPS] = useState(false);
 
   const styles = getStyles(colors, isDarkMode);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await Location.requestForegroundPermissionsAsync();
+      } catch (err) {
+        console.warn('Erro ao solicitar permissão de localização:', err);
+      }
+    })();
+  }, []);
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -40,7 +52,24 @@ export function CameraScreen({ navigation }: any) {
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     setScanned(true);
+    setLoadingGPS(true);
     
+    let lat: number | null = null;
+    let lon: number | null = null;
+
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        lat = location.coords.latitude;
+        lon = location.coords.longitude;
+      }
+    } catch (locationError) {
+      console.warn('Não foi possível obter a geolocalização do aparelho:', locationError);
+    }
+
     try {
       const userId = await getCurrentUserId();
 
@@ -48,16 +77,23 @@ export function CameraScreen({ navigation }: any) {
         checkpoint_id: data, 
         scanned_at: new Date().toISOString(),
         user_id: userId ?? undefined,
+        latitude_scanned: lat,
+        longitude_scanned: lon,
       });
+
+      setLoadingGPS(false);
 
       showAlert({
         title: 'Ponto Registrado! 📍',
-        message: 'Seu check-in foi salvo no passaporte. Ele será sincronizado quando houver internet.',
+        message: lat && lon 
+          ? 'Seu check-in e sua localização GPS foram salvos offline com sucesso!' 
+          : 'Seu check-in foi salvo, mas não conseguimos obter o GPS local. Ele será validado ao sincronizar.',
         variant: 'success',
         onConfirm: () => navigation.goBack(),
       });
 
     } catch (error) {
+      setLoadingGPS(false);
       showAlert({
         title: 'Erro',
         message: 'Não foi possível salvar o check-in.',
@@ -84,6 +120,13 @@ export function CameraScreen({ navigation }: any) {
         <Text style={styles.cancelButtonText}>Cancelar</Text>
       </TouchableOpacity>
 
+      {loadingGPS && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingGPSText}>Obtendo localização GPS...</Text>
+        </View>
+      )}
+
       {alertModal}
     </View>
   );
@@ -107,5 +150,19 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   scanArea: { width: 250, height: 250, borderWidth: 2, borderColor: colors.primary, borderRadius: 20, backgroundColor: 'transparent', marginBottom: 30 },
   scanText: { color: '#FFF', fontSize: 17, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, overflow: 'hidden' },
   cancelButton: { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: colors.card, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30 },
-  cancelButtonText: { color: colors.primary, fontSize: 17, fontWeight: '600' }
+  cancelButtonText: { color: colors.primary, fontSize: 17, fontWeight: '600' },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  loadingGPSText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 15,
+  }
 });

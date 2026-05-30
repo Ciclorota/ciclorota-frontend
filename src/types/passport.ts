@@ -22,7 +22,7 @@ export interface Checkpoint {
   latitude: number | null;
   longitude: number | null;
   map: string | null;
-  qr_code?: string | null;
+  info: string | null;
 }
 
 export interface RouteCheckpoint extends Checkpoint {
@@ -33,7 +33,6 @@ export interface ProgressCheckpoint {
   id: EntityId;
   name: string;
   description: string | null;
-  qr_code: string;
 }
 
 export interface ProgressHistoryItem {
@@ -51,6 +50,8 @@ export interface PendingCheckin {
   checkpoint_id: string;
   scanned_at: string;
   user_id?: string;
+  latitude_scanned?: number | null;
+  longitude_scanned?: number | null;
 }
 
 export interface UpdateProfileInput {

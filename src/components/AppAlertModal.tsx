@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 // @ts-ignore
@@ -109,7 +109,7 @@ export function useAppAlert() {
     confirmText: 'OK',
   });
 
-  const showAlert = (options: AppAlertOptions) => {
+  const showAlert = useCallback((options: AppAlertOptions) => {
     setState({
       visible: true,
       title: options.title,
@@ -120,11 +120,11 @@ export function useAppAlert() {
       onConfirm: options.onConfirm,
       onCancel: options.onCancel,
     });
-  };
+  }, []);
 
-  const closeAlert = () => {
+  const closeAlert = useCallback(() => {
     setState((prev) => ({ ...prev, visible: false }));
-  };
+  }, []);
 
   const handleConfirm = async () => {
     const confirmAction = state.onConfirm;

@@ -227,20 +227,39 @@ export function RouteScreen() {
                 <Text style={styles.modalDescription}>{selectedPoint.description}</Text>
               </ScrollView>
 
-              <TouchableOpacity 
-                style={styles.routeButton} 
-                onPress={() => {
-                  const mapUrl = resolveMapUrl(selectedPoint);
-                  if (mapUrl) {
-                    Linking.openURL(mapUrl).catch((err) => console.error('Erro ao abrir o link do mapa:', err));
-                  } else {
-                    console.log('Nenhum link de mapa disponível para esta rota.');
-                  }
-                }}
-              >
-                <Ionicons name="map" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                <Text style={styles.routeButtonText}>Traçar Rota</Text>
-              </TouchableOpacity>
+              <View style={styles.modalButtonsContainer}>
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.routeButton]} 
+                  onPress={() => {
+                    const mapUrl = resolveMapUrl(selectedPoint);
+                    if (mapUrl) {
+                      Linking.openURL(mapUrl).catch((err) => console.error('Erro ao abrir o link do mapa:', err));
+                    } else {
+                      console.log('Nenhum link de mapa disponível para esta rota.');
+                    }
+                  }}
+                >
+                  <Ionicons name="map" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalButtonText}>Traçar Rota</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[
+                    styles.modalButton, 
+                    styles.wikilocButton, 
+                    !selectedPoint.info && styles.buttonDisabled
+                  ]} 
+                  disabled={!selectedPoint.info}
+                  onPress={() => {
+                    if (selectedPoint.info) {
+                      Linking.openURL(selectedPoint.info).catch((err) => console.error('Erro ao abrir o link do Wikiloc:', err));
+                    }
+                  }}
+                >
+                  <Ionicons name="compass-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalButtonText}>Ver no Wikiloc</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -287,6 +306,33 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   imagePlaceholder: { width: 320, height: 220, borderRadius: 12, marginRight: 12 },
   modalDescriptionContainer: { flex: 1, marginBottom: 24 },
   modalDescription: { fontSize: 16, color: colors.textSecondary, lineHeight: 24 },
-  routeButton: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12 },
-  routeButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' }
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    height: 52,
+  },
+  routeButton: {
+    backgroundColor: colors.primary,
+  },
+  wikilocButton: {
+    backgroundColor: colors.success,
+  },
+  buttonDisabled: {
+    backgroundColor: colors.border,
+    opacity: 0.6,
+  },
+  modalButtonText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  }
 });

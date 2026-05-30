@@ -206,7 +206,9 @@ export function ProfileScreen({ navigation }: any) {
                       <Ionicons name="location" size={20} color={colors.success} />
                     </View>
                     <View style={styles.itemTextContainer}>
-                      <Text style={styles.itemName}>{item.checkpoints?.name}</Text>
+                      <Text style={styles.itemName} numberOfLines={2} ellipsizeMode="tail">
+                        {item.checkpoints?.name}
+                      </Text>
                       <Text style={styles.itemDate}>{formatDate(item.scanned_at)}</Text>
                     </View>
                   </View>
@@ -296,12 +298,18 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   
   historyContainerLimit: { maxHeight: 280 }, 
   
-  listItemHistory: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 16, paddingHorizontal: 16, position: 'relative' },
+  listItemHistory: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    position: 'relative',
+    height: 88,
+  },
   iconContainerGreen: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.successBg, justifyContent: 'center', alignItems: 'center', marginRight: 12, zIndex: 2 },
-  timelineLine: { position: 'absolute', top: 58, bottom: -10, left: 33, width: 2, backgroundColor: colors.borderLight, zIndex: 1 },
-  itemTextContainer: { flex: 1, justifyContent: 'center', height: 36 },
-  itemName: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: 2 },
-  itemDate: { fontSize: 14, color: colors.textSecondary },
+  timelineLine: { position: 'absolute', top: 62, bottom: -26, left: 33, width: 2, backgroundColor: colors.borderLight, zIndex: 1 },
+  itemTextContainer: { flex: 1, justifyContent: 'center', height: 64 },
+  itemName: { fontSize: 16, fontWeight: '600', color: colors.text, lineHeight: 20, marginBottom: 2 },
+  itemDate: { fontSize: 13, color: colors.textSecondary, lineHeight: 16 },
 
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
   menuIconBg: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 15 },

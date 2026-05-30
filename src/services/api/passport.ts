@@ -22,10 +22,19 @@ export async function syncPendingCheckins(
     return { status: 'idle', syncedCount: 0 };
   }
 
-  const payload = pendingCheckins.map(({ checkpoint_id, scanned_at }) => ({
-    checkpoint_id,
-    scanned_at,
-  }));
+  const payload = pendingCheckins.map(
+    ({
+      checkpoint_id,
+      scanned_at,
+      latitude_scanned,
+      longitude_scanned,
+    }) => ({
+      checkpoint_id,
+      scanned_at,
+      latitude_scanned,
+      longitude_scanned,
+    }),
+  );
 
   try {
     await apiRequest('/checkins', {
