@@ -15,6 +15,14 @@ export interface UserProfile {
   estatisticas: ProfileStats;
 }
 
+export interface CheckpointImage {
+  id: EntityId;
+  url: string;
+  position: number;
+  width: number | null;
+  height: number | null;
+}
+
 export interface Checkpoint {
   id: EntityId;
   name: string;
@@ -23,6 +31,7 @@ export interface Checkpoint {
   longitude: number | null;
   map: string | null;
   info: string | null;
+  images?: CheckpointImage[];
 }
 
 export interface RouteCheckpoint extends Checkpoint {

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Platform, Linking, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView, TouchableOpacity, Platform, Linking, Modal, FlatList, Dimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { Image } from 'expo-image';
 import { useFocusEffect } from '@react-navigation/native';
 // @ts-ignore
 import { Ionicons } from '@expo/vector-icons';
@@ -11,9 +12,11 @@ import { fetchCheckpoints } from '../services/api/passport';
 import { fetchCurrentUserProgress } from '../services/api/profile';
 import { getCurrentSession } from '../services/auth';
 import { getPendingCheckins } from '../storage/checkins';
-import { Checkpoint, RouteCheckpoint } from '../types/passport';
+import { Checkpoint, CheckpointImage, RouteCheckpoint } from '../types/passport';
 
 const ROUTE_CACHE_KEY = '@ciclorota_route_cache';
+// Largura do carrossel = largura da tela menos o padding (24px) de cada lado do modal.
+const CAROUSEL_WIDTH = Dimensions.get('window').width - 48;
 
 type RouteMapSource = Checkpoint & {
   map_url?: string | null;
@@ -23,6 +26,67 @@ type RouteMapSource = Checkpoint & {
 
 function getRouteCacheKey(userId: string) {
   return `${ROUTE_CACHE_KEY}:${userId}`;
+}
+
+function CheckpointCarousel({
+  images,
+  styles,
+  colors,
+}: {
+  images?: CheckpointImage[];
+  styles: ReturnType<typeof getStyles>;
+  colors: any;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  if (!images || images.length === 0) {
+    return (
+      <View style={styles.carouselContainer}>
+        <View style={[styles.imageEmpty, { backgroundColor: colors.borderLight }]}>
+          <Ionicons name="image-outline" size={40} color={colors.textSecondary} />
+          <Text style={styles.imageEmptyText}>Sem fotos disponíveis</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / CAROUSEL_WIDTH);
+    setActiveIndex(index);
+  };
+
+  return (
+    <View style={styles.carouselContainer}>
+      <FlatList
+        data={images}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
+        renderItem={({ item }) => (
+          <Image
+            source={{ uri: item.url }}
+            style={[styles.carouselImage, { width: CAROUSEL_WIDTH }]}
+            contentFit="cover"
+            transition={250}
+            cachePolicy="memory-disk"
+          />
+        )}
+      />
+
+      {images.length > 1 && (
+        <View style={styles.dotsContainer}>
+          {images.map((image, index) => (
+            <View
+              key={image.id}
+              style={[styles.dot, index === activeIndex ? styles.dotActive : styles.dotInactive]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
 }
 
 export function RouteScreen() {
@@ -217,11 +281,7 @@ export function RouteScreen() {
               
               <Text style={styles.modalTitle}>{selectedPoint.name}</Text>
               
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carouselContainer}>
-                <View style={[styles.imagePlaceholder, { backgroundColor: colors.borderLight }]} />
-                <View style={[styles.imagePlaceholder, { backgroundColor: colors.borderLight }]} />
-                <View style={[styles.imagePlaceholder, { backgroundColor: colors.borderLight }]} />
-              </ScrollView>
+              <CheckpointCarousel images={selectedPoint.images} styles={styles} colors={colors} />
 
               <ScrollView style={styles.modalDescriptionContainer}>
                 <Text style={styles.modalDescription}>{selectedPoint.description}</Text>
@@ -302,8 +362,14 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   modalContent: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, height: '85%' },
   closeButton: { alignSelf: 'flex-end', padding: 8 },
   modalTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text, marginBottom: 16 },
-  carouselContainer: { flexDirection: 'row', marginBottom: 20, maxHeight: 220 },
-  imagePlaceholder: { width: 320, height: 220, borderRadius: 12, marginRight: 12 },
+  carouselContainer: { marginBottom: 20 },
+  carouselImage: { height: 220, borderRadius: 12 },
+  imageEmpty: { width: CAROUSEL_WIDTH, height: 220, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  imageEmptyText: { marginTop: 8, fontSize: 13, color: colors.textSecondary },
+  dotsContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 10, gap: 6 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  dotActive: { backgroundColor: colors.primary, width: 18 },
+  dotInactive: { backgroundColor: colors.border },
   modalDescriptionContainer: { flex: 1, marginBottom: 24 },
   modalDescription: { fontSize: 16, color: colors.textSecondary, lineHeight: 24 },
   modalButtonsContainer: {
