@@ -49,24 +49,31 @@ export async function syncPendingCheckins(
       syncedCount: payload.length,
     };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 409) {
+    // Regra: qualquer resposta 4xx do servidor é definitiva (QR inválido,
+    // geofence, duplicidade, etc.) — limpamos a fila local. Só 5xx ou
+    // falhas de rede (sem internet) mantêm a fila para tentar de novo.
+    if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
       await clearPendingCheckins(userId);
 
+      if (error.status === 409) {
+        return {
+          status: 'conflict',
+          syncedCount: payload.length,
+        };
+      }
+
+      const message = (error.message || '').toLowerCase();
+      const isGeofence =
+        message.includes('localiza') || message.includes('longe') || message.includes('limite permitido');
+
       return {
-        status: 'conflict',
+        status: isGeofence ? 'rejected' : 'discarded',
         syncedCount: payload.length,
+        reason: error.message,
       };
     }
 
-    if (error instanceof ApiError && error.status === 400) {
-      await clearPendingCheckins(userId);
-
-      return {
-        status: 'discarded',
-        syncedCount: payload.length,
-      };
-    }
-
+    // Sem internet ou 5xx — fila continua pendente para retry futuro.
     throw error;
   }
 }

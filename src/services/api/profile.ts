@@ -20,3 +20,18 @@ export function updateCurrentUserProfile(payload: UpdateProfileInput) {
     body: JSON.stringify(payload),
   });
 }
+
+export async function uploadCurrentUserAvatar(localUri: string, mimeType: string) {
+  const form = new FormData();
+  // React Native FormData aceita { uri, name, type } como "blob" para upload.
+  form.append('file', {
+    uri: localUri,
+    name: `avatar.${mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'}`,
+    type: mimeType,
+  } as any);
+
+  return apiRequest<ProfileUpdateResponse>('/me/profile/avatar', {
+    method: 'POST',
+    body: form as any,
+  });
+}

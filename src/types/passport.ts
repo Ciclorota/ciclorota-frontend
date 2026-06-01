@@ -99,6 +99,8 @@ export interface AuthMeResponse {
 }
 
 export interface SyncCheckinsResult {
-  status: 'idle' | 'success' | 'conflict' | 'discarded';
+  status: 'idle' | 'success' | 'conflict' | 'discarded' | 'rejected';
   syncedCount: number;
+  /** Mensagem detalhada vinda do servidor (presente em `rejected`/`discarded`). */
+  reason?: string;
 }

@@ -52,8 +52,24 @@ export function CameraScreen({ navigation }: any) {
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     setScanned(true);
+
+    // Pré-valida que o conteúdo do QR é um UUID válido (o id do checkpoint)
+    // antes de chegar no backend, para dar mensagem amigável quando o QR
+    // escaneado não é da Ciclorota.
+    const token = (data ?? '').trim();
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(token)) {
+      showAlert({
+        title: 'QR Code não reconhecido',
+        message: 'Este QR não parece ser de um checkpoint oficial da Ciclorota. Verifique se está escaneando o código correto fixado no ponto.',
+        variant: 'warning',
+        onConfirm: () => setScanned(false),
+      });
+      return;
+    }
+
     setLoadingGPS(true);
-    
+
     let lat: number | null = null;
     let lon: number | null = null;
 
@@ -74,7 +90,7 @@ export function CameraScreen({ navigation }: any) {
       const userId = await getCurrentUserId();
 
       await addPendingCheckin({
-        checkpoint_id: data, 
+        checkpoint_id: token,
         scanned_at: new Date().toISOString(),
         user_id: userId ?? undefined,
         latitude_scanned: lat,

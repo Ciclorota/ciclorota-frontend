@@ -129,10 +129,23 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
           message: 'Os check-ins salvos offline foram enviados!',
           variant: 'success',
         });
+      } else if (syncResult.status === 'rejected') {
+        // Servidor rejeitou (ex.: muito longe do checkpoint). A fila local
+        // foi limpa — o usuário precisa escanear novamente quando estiver
+        // de fato no ponto.
+        showAlert({
+          title: 'Check-in rejeitado',
+          message:
+            syncResult.reason ||
+            'A validação de localização falhou. Escaneie o QR de novo no local correto.',
+          variant: 'warning',
+        });
       } else if (syncResult.status === 'discarded') {
         showAlert({
           title: 'QR Code Limpo 🧹',
-          message: 'Um código inválido que estava a travar a sincronização foi descartado da fila.',
+          message:
+            syncResult.reason ||
+            'Um código inválido que estava a travar a sincronização foi descartado da fila.',
           variant: 'warning',
         });
       }
