@@ -10,7 +10,9 @@ import { useAppAlert } from '../components/AppAlertModal';
 import { getUserOfflineSnapshot, updateUserOfflineSnapshot } from '../services/offlineCache';
 import { fetchAuthMe } from '../services/api/auth';
 import { fetchCurrentUserProgress } from '../services/api/profile';
+import { shareMyCertificatePdf } from '../services/api/certificate';
 import { getCurrentSession, signOut } from '../services/auth';
+import { getErrorMessage } from '../lib/errors';
 import { ProgressHistoryItem, UserProfile } from '../types/passport';
 
 const PROFILE_CACHE_KEY = '@ciclorota_profile_cache';
@@ -26,6 +28,23 @@ export function ProfileScreen({ navigation }: any) {
   const [history, setHistory] = useState<ProgressHistoryItem[]>([]);
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [downloadingCertificate, setDownloadingCertificate] = useState(false);
+
+  const handleDownloadCertificate = async () => {
+    if (downloadingCertificate) return;
+    setDownloadingCertificate(true);
+    try {
+      await shareMyCertificatePdf();
+    } catch (error) {
+      showAlert({
+        title: 'Erro ao baixar certificado',
+        message: getErrorMessage(error, 'Tente novamente em instantes.'),
+        variant: 'error',
+      });
+    } finally {
+      setDownloadingCertificate(false);
+    }
+  };
 
   const fetchProfileAndHistory = async () => {
     setLoading(true);
@@ -81,9 +100,9 @@ export function ProfileScreen({ navigation }: any) {
 
       const latestProfile = authSnapshot.profile
         ? {
-            ...authSnapshot.profile,
-            email: authSnapshot.user.email,
-          }
+          ...authSnapshot.profile,
+          email: authSnapshot.user.email,
+        }
         : null;
       const latestHistory = [...(progressData.historico || [])].sort((a, b) => {
         return new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime();
@@ -125,9 +144,9 @@ export function ProfileScreen({ navigation }: any) {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', { 
-      day: '2-digit', month: 'short', year: 'numeric', 
-      hour: '2-digit', minute: '2-digit' 
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
   };
 
@@ -152,7 +171,7 @@ export function ProfileScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
+
         <View style={styles.profileHeader}>
           <View style={styles.avatarPlaceholder}>
             {profile?.avatar_url ? (
@@ -173,18 +192,33 @@ export function ProfileScreen({ navigation }: any) {
             <Text style={styles.statLabel}>{history.length === 1 ? "Ponto" : "Pontos"}</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Ionicons 
-              name={profile?.estatisticas?.possui_certificado ? "medal" : "medal-outline"} 
-              size={24} 
-              color={profile?.estatisticas?.possui_certificado ? colors.warning : colors.border} 
-            />
-            <Text style={styles.statLabel}>Certificado</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.statBox}
+            activeOpacity={profile?.estatisticas?.possui_certificado ? 0.6 : 1}
+            disabled={!profile?.estatisticas?.possui_certificado || downloadingCertificate}
+            onPress={handleDownloadCertificate}
+          >
+            {downloadingCertificate ? (
+              <ActivityIndicator size="small" color={colors.warning} />
+            ) : (
+              <Ionicons
+                name={profile?.estatisticas?.possui_certificado ? 'medal' : 'medal-outline'}
+                size={24}
+                color={profile?.estatisticas?.possui_certificado ? colors.warning : colors.border}
+              />
+            )}
+            <Text style={styles.statLabel}>
+              {profile?.estatisticas?.possui_certificado
+                ? downloadingCertificate
+                  ? 'Baixando...'
+                  : 'Baixar Certificado'
+                : 'Certificado'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionTitle}>HISTÓRICO DE CHECK-INS</Text>
-        
+
         {history.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>Ainda não visitou nenhum ponto.</Text>
@@ -192,8 +226,8 @@ export function ProfileScreen({ navigation }: any) {
           </View>
         ) : (
           <View style={[styles.listContainer, styles.historyContainerLimit]}>
-            <ScrollView 
-              nestedScrollEnabled={true} 
+            <ScrollView
+              nestedScrollEnabled={true}
               showsVerticalScrollIndicator={true}
               contentContainerStyle={{ paddingBottom: 5 }}
             >
@@ -220,7 +254,7 @@ export function ProfileScreen({ navigation }: any) {
 
         <Text style={styles.sectionTitle}>MINHA CONTA</Text>
         <View style={styles.listContainer}>
-          
+
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
             <View style={[styles.menuIconBg, { backgroundColor: isDarkMode ? colors.primaryBg : '#E5F1FF' }]}>
               <Ionicons name="person-outline" size={20} color={colors.primary} />
@@ -228,7 +262,7 @@ export function ProfileScreen({ navigation }: any) {
             <Text style={styles.menuItemText}>Meu perfil</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.border} />
           </TouchableOpacity>
-          
+
           <View style={styles.menuDivider} />
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Settings')}>
@@ -238,7 +272,7 @@ export function ProfileScreen({ navigation }: any) {
             <Text style={styles.menuItemText}>Configurações</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.border} />
           </TouchableOpacity>
-          
+
           <View style={styles.menuDivider} />
 
           <TouchableOpacity
@@ -260,7 +294,7 @@ export function ProfileScreen({ navigation }: any) {
 
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.destructiveButton}
           onPress={() => signOut()}
         >
@@ -279,7 +313,7 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingTop: 40 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 30, paddingBottom: 40 },
-  
+
   profileHeader: { alignItems: 'center', marginBottom: 24 },
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 12, shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
@@ -295,13 +329,13 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
 
   sectionTitle: { fontSize: 13, color: colors.textSecondary, textTransform: 'uppercase', fontWeight: '500', marginLeft: 16, marginBottom: 8, marginTop: 10 },
   listContainer: { backgroundColor: colors.card, borderRadius: 12, overflow: 'hidden', shadowColor: colors.text, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, marginBottom: 30 },
-  
-  historyContainerLimit: { maxHeight: 280 }, 
-  
-  listItemHistory: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 16, 
+
+  historyContainerLimit: { maxHeight: 280 },
+
+  listItemHistory: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     position: 'relative',
     height: 88,
   },
@@ -314,7 +348,7 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
   menuIconBg: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   menuItemText: { flex: 1, fontSize: 17, color: colors.text, fontWeight: '400' },
-  menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border }, 
+  menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   emptyState: { backgroundColor: colors.card, padding: 30, borderRadius: 12, alignItems: 'center', marginBottom: 40 },
   emptyStateText: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: 8 },

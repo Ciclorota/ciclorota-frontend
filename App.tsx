@@ -8,6 +8,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthSession } from './src/hooks/useAuthSession';
+import { useProfileGate } from './src/hooks/useProfileGate';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -16,6 +17,7 @@ import { RouteScreen } from './src/screens/RouteScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { CompleteProfileScreen } from './src/screens/CompleteProfileScreen';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -65,6 +67,7 @@ function MainTabs({ session }: any) {
 function RootNavigator() {
   const { colors, isDarkMode } = useTheme();
   const { session, isLoading } = useAuthSession();
+  const { status: profileGateStatus, refresh: refreshProfileGate } = useProfileGate(session);
   const appBackgroundStyle = { flex: 1, backgroundColor: colors.background };
 
   const navigationTheme = {
@@ -102,6 +105,22 @@ function RootNavigator() {
             <Stack.Screen name="Register" component={RegisterScreen} />
           </Stack.Navigator>
         </NavigationContainer>
+      </View>
+    );
+  }
+
+  // Gate: usuário autenticado mas ainda não definiu o nome completo.
+  // Bloqueia o app inteiro até gravar. 'error' (não conseguimos confirmar online
+  // nem offline) também cai aqui — assumimos que precisa preencher; o save tenta
+  // pelo /me/profile e exibe o erro se a rede falhar.
+  if (profileGateStatus === 'loading' || profileGateStatus === 'idle') {
+    return <View style={appBackgroundStyle} />;
+  }
+
+  if (profileGateStatus === 'needs_name' || profileGateStatus === 'error') {
+    return (
+      <View style={appBackgroundStyle}>
+        <CompleteProfileScreen onCompleted={refreshProfileGate} />
       </View>
     );
   }

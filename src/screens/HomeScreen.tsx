@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, SafeAreaView, ScrollView, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, SafeAreaView, ScrollView, StatusBar, Platform, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Session } from '@supabase/supabase-js';
 // @ts-ignore
@@ -16,6 +16,7 @@ import {
   issueCertificate,
   syncPendingCheckins,
 } from '../services/api/passport';
+import { shareMyCertificatePdf } from '../services/api/certificate';
 import { fetchCurrentUserProgress } from '../services/api/profile';
 import {
   Checkpoint,
@@ -49,29 +50,29 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
   const { colors, isDarkMode } = useTheme();
   const { showAlert, alertModal } = useAppAlert();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [totalCheckpoints, setTotalCheckpoints] = useState(0); 
+  const [totalCheckpoints, setTotalCheckpoints] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false); 
-  const [issuing, setIssuing] = useState(false); 
+  const [syncing, setSyncing] = useState(false);
+  const [issuing, setIssuing] = useState(false);
   const [serverVisitedCount, setServerVisitedCount] = useState(0);
-  
-  const [offlineCount, setOfflineCount] = useState(0); 
-  const [validOfflineCount, setValidOfflineCount] = useState(0); 
+
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [validOfflineCount, setValidOfflineCount] = useState(0);
 
   const progressStats = useMemo(() => {
     const visitadosServidor = serverVisitedCount;
-    const visitados = visitadosServidor + validOfflineCount; 
+    const visitados = visitadosServidor + validOfflineCount;
     const porcentagem = totalCheckpoints > 0 ? Math.round((visitados / totalCheckpoints) * 100) : 0;
-    
+
     let mensagem = "Continue pedalando! 🚴‍♂️";
-    let statusColor = colors.primary; 
+    let statusColor = colors.primary;
 
     if (porcentagem >= 100 && totalCheckpoints > 0) {
       mensagem = "Parabéns, você completou! 🎉";
-      statusColor = colors.success; 
+      statusColor = colors.success;
     } else if (porcentagem >= 80) {
       mensagem = "Quase lá! Falta pouco. 🔥";
-      statusColor = colors.warning; 
+      statusColor = colors.warning;
     }
 
     return { visitados, porcentagem, mensagem, statusColor };
@@ -83,7 +84,7 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
       setLoading(false);
       return;
     }
-    
+
     try {
       setSyncing(true);
       let latestProfileData: UserProfile | null = null;
@@ -144,9 +145,9 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
 
       latestProfileData = authSnapshot.profile
         ? {
-            ...authSnapshot.profile,
-            email: authSnapshot.user.email,
-          }
+          ...authSnapshot.profile,
+          email: authSnapshot.user.email,
+        }
         : null;
       latestCheckpoints = checkpoints;
       latestProgressHistory = progressData.historico || [];
@@ -190,11 +191,27 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
       const data = await issueCertificate();
 
       if (data.mensagem) {
-        showAlert({
-          title: 'Parabéns! 🏆',
-          message: data.mensagem,
-          variant: 'success',
-        });
+        // Oferece o download na hora. Usa Alert nativo (suporte a múltiplos
+        // botões com handler), enquanto o feedback fica no nosso modal.
+        Alert.alert(
+          'Certificado emitido! 🏆',
+          'Você quer baixar agora o PDF do seu certificado de conclusão?',
+          [
+            { text: 'Mais tarde', style: 'cancel' },
+            {
+              text: 'Baixar Certificado',
+              onPress: () => {
+                void shareMyCertificatePdf().catch((err) => {
+                  showAlert({
+                    title: 'Erro ao baixar',
+                    message: getErrorMessage(err, 'Tente novamente em instantes.'),
+                    variant: 'error',
+                  });
+                });
+              },
+            },
+          ],
+        );
         const updatedProfile: UserProfile = {
           id: profile?.id ?? userId,
           email: profile?.email,
@@ -248,11 +265,11 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer} 
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
-        
+
         <View style={styles.header}>
           <Text style={styles.greeting}>Olá, {profile?.full_name?.split(' ')[0] || 'Ciclista'}</Text>
           <Text style={styles.largeTitle}>Seu Passaporte</Text>
@@ -306,7 +323,7 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
           </View>
         )}
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.primaryButton}
           onPress={() => navigation.navigate('Camera')}
           activeOpacity={0.8}
@@ -319,17 +336,17 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
         <View style={styles.rewardCard}>
           <View style={styles.rewardRow}>
             <View style={[styles.rewardIconContainer, profile?.estatisticas?.possui_certificado ? styles.iconActive : styles.iconLocked]}>
-              <Ionicons 
-                name={profile?.estatisticas?.possui_certificado ? "ribbon" : "lock-closed"} 
-                size={24} 
-                color={profile?.estatisticas?.possui_certificado ? colors.warning : colors.textSecondary} 
+              <Ionicons
+                name={profile?.estatisticas?.possui_certificado ? "ribbon" : "lock-closed"}
+                size={24}
+                color={profile?.estatisticas?.possui_certificado ? colors.warning : colors.textSecondary}
               />
             </View>
             <View style={styles.rewardTextContent}>
               <Text style={styles.rewardName}>Certificado de Conclusão</Text>
               <Text style={styles.rewardStatus}>
-                {profile?.estatisticas?.possui_certificado 
-                  ? "Sua conquista está disponível!" 
+                {profile?.estatisticas?.possui_certificado
+                  ? "Sua conquista está disponível!"
                   : progressStats.porcentagem >= 100
                     ? "Parabéns! Clique no botão abaixo para resgatar."
                     : `Visite mais ${totalCheckpoints > 0 ? totalCheckpoints - progressStats.visitados : '...'} ${(totalCheckpoints - progressStats.visitados) === 1 ? 'parada' : 'paradas'} para resgatar.`
@@ -338,10 +355,10 @@ export function HomeScreen({ session, navigation }: HomeScreenProps) {
             </View>
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-                styles.actionButton, 
-                profile?.estatisticas?.possui_certificado ? styles.btnClaimed : (progressStats.porcentagem < 100 ? styles.btnDisabled : styles.btnActive)
+              styles.actionButton,
+              profile?.estatisticas?.possui_certificado ? styles.btnClaimed : (progressStats.porcentagem < 100 ? styles.btnDisabled : styles.btnActive)
             ]}
             disabled={progressStats.porcentagem < 100 || profile?.estatisticas?.possui_certificado || issuing}
             onPress={handleIssueCertificate}
@@ -374,20 +391,20 @@ const getStyles = (colors: any, isDarkMode: boolean) => StyleSheet.create({
   progressTitle: { fontSize: 13, color: colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' },
   progressSub: { fontSize: 20, fontWeight: '700', color: colors.text, marginVertical: 2 },
   motivationText: { fontSize: 13, fontWeight: '600', marginTop: 4 },
-  primaryButton: { 
-    backgroundColor: colors.primary, 
-    height: 65, 
-    borderRadius: 20, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 10, 
-    marginBottom: 35, 
-    shadowColor: colors.primary, 
-    shadowOffset: { width: 0, height: 6 }, 
-    shadowOpacity: 0.3, 
-    shadowRadius: 10, 
-    elevation: 6 
+  primaryButton: {
+    backgroundColor: colors.primary,
+    height: 65,
+    borderRadius: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 35,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6
   },
   primaryButtonText: { color: colors.white, fontSize: 18, fontWeight: '700' },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 15, marginLeft: 5 },
